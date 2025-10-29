@@ -124,6 +124,16 @@ export const POOL_ABI = [
   // ========== VIEW FUNCTIONS ==========
   {
     "inputs": [
+      { "internalType": "address", "name": "", "type": "address" },
+      { "internalType": "address", "name": "", "type": "address" }
+    ],
+    "name": "userCollateralEnabled",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
       { "internalType": "address", "name": "user", "type": "address" },
       { "internalType": "address", "name": "asset", "type": "address" }
     ],

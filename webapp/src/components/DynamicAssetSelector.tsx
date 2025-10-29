@@ -1,10 +1,12 @@
 'use client';
 
+import React, { useState } from 'react';
 import { Box, Typography, Button, Chip, CircularProgress, Alert, Switch, FormControlLabel, Tooltip } from '@mui/material';
 import { AvailableAsset } from '../hooks/useAvailableReserves';
 import { useAccount } from 'wagmi';
-import { useCollateralToggle } from '../hooks/useCollateralToggle';
+import useCollateralToggle from '../hooks/useCollateralToggle';
 import { Lock, LockOpen } from '@mui/icons-material';
+import { CONTRACTS } from '../config/contracts';
 
 interface DynamicAssetSelectorProps {
   assets: AvailableAsset[];
@@ -28,24 +30,15 @@ function AssetCard({
   isDarkMode: boolean;
   userAddress: string | undefined;
 }) {
-  const {
-    isCollateralEnabled,
-    isLoadingStatus,
-    toggleCollateral,
-    isPending,
-    isSuccess,
-    transactionError
-  } = useCollateralToggle({
-    assetAddress: asset.address,
-    userAddress,
-    enabled: asset.isCollateral && mode === 'supply' // Only for supply mode and collateral assets
-  });
+  const { toggleCollateral, isToggling, error } = useCollateralToggle();
+  const [localCollateralEnabled, setLocalCollateralEnabled] = useState<boolean>(false);
 
   const handleToggleCollateral = async (event: React.ChangeEvent<HTMLInputElement>) => {
     event.stopPropagation();
     const newValue = event.target.checked;
     console.log(`🔄 Toggling collateral for ${asset.symbol}:`, newValue);
-    await toggleCollateral(newValue);
+    setLocalCollateralEnabled(newValue);
+    await toggleCollateral({ address: asset.address, symbol: asset.symbol }, newValue);
   };
 
   return (
@@ -191,8 +184,8 @@ function AssetCard({
         )}
       </Box>
 
-      {/* Collateral Toggle Section - Supply mode only */}
-      {mode === 'supply' && (
+      {/* Collateral Toggle Section - Supply mode only, for cWETH only */}
+      {mode === 'supply' && asset.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase() && (
         <Box sx={{
           px: 2,
           py: 1.5,
@@ -200,58 +193,44 @@ function AssetCard({
             ? '1px solid rgba(255, 255, 255, 0.05)'
             : '1px solid rgba(44, 62, 80, 0.05)'
         }}>
-          {asset.isCollateral ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {isCollateralEnabled ? (
-                  <LockOpen sx={{ fontSize: '1.1rem', color: '#4caf50' }} />
-                ) : (
-                  <Lock sx={{ fontSize: '1.1rem', opacity: 0.5 }} />
-                )}
-                <Typography variant="body2" sx={{
-                  fontSize: '0.8rem',
-                  opacity: 0.8,
-                  color: isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(44, 62, 80, 0.8)'
-                }}>
-                  Collateral {isCollateralEnabled ? 'Enabled' : 'Disabled'}
-                </Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Tooltip
-                  title={isPending ? "Processing..." : isCollateralEnabled ? "Click to disable as collateral" : "Click to enable as collateral"}
-                  arrow
-                >
-                  <Switch
-                    checked={isCollateralEnabled || false}
-                    onChange={handleToggleCollateral}
-                    disabled={isLoadingStatus || isPending}
-                    size="small"
-                    onClick={(e) => e.stopPropagation()}
-                    sx={{
-                      '& .MuiSwitch-switchBase.Mui-checked': {
-                        color: '#4caf50',
-                      },
-                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                        backgroundColor: '#4caf50',
-                      },
-                    }}
-                  />
-                </Tooltip>
-                {isPending && (
-                  <CircularProgress size={14} sx={{ color: '#2196f3' }} />
-                )}
-              </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Lock sx={{ fontSize: '1.1rem', opacity: 0.5 }} />
+              <Typography variant="body2" sx={{
+                fontSize: '0.8rem',
+                opacity: 0.8,
+                color: isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(44, 62, 80, 0.8)'
+              }}>
+                Collateral Disabled
+              </Typography>
             </Box>
-          ) : (
-            <Typography variant="body2" sx={{
-              opacity: 0.6,
-              fontSize: '0.8rem',
-              textAlign: 'center'
-            }}>
-              Not available as collateral
-            </Typography>
-          )}
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Tooltip
+                title={isToggling ? "Processing..." : localCollateralEnabled ? "Click to disable as collateral" : "Click to enable as collateral"}
+                arrow
+              >
+                <Switch
+                  checked={localCollateralEnabled}
+                  onChange={handleToggleCollateral}
+                  disabled={isToggling}
+                  size="small"
+                  onClick={(e) => e.stopPropagation()}
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: '#4caf50',
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: '#4caf50',
+                    },
+                  }}
+                />
+              </Tooltip>
+              {isToggling && (
+                <CircularProgress size={14} sx={{ color: '#2196f3' }} />
+              )}
+            </Box>
+          </Box>
         </Box>
       )}
 
@@ -322,24 +301,15 @@ function AssetRow({
   isDarkMode: boolean;
   userAddress: string | undefined;
 }) {
-  const { 
-    isCollateralEnabled, 
-    isLoadingStatus, 
-    toggleCollateral, 
-    isPending,
-    isSuccess,
-    transactionError 
-  } = useCollateralToggle({
-    assetAddress: asset.address,
-    userAddress,
-    enabled: asset.isCollateral && mode === 'supply' // Only for supply mode and collateral assets
-  });
+  const { toggleCollateral, isToggling, error } = useCollateralToggle();
+  const [localCollateralEnabled, setLocalCollateralEnabled] = useState<boolean>(false);
 
   const handleToggleCollateral = async (event: React.ChangeEvent<HTMLInputElement>) => {
     event.stopPropagation();
     const newValue = event.target.checked;
     console.log(`🔄 Toggling collateral for ${asset.symbol}:`, newValue);
-    await toggleCollateral(newValue);
+    setLocalCollateralEnabled(newValue);
+    await toggleCollateral({ address: asset.address, symbol: asset.symbol }, newValue);
   };
 
   return (
@@ -402,58 +372,52 @@ function AssetRow({
         </Typography>
       </td>
 
-      {/* Collateral Toggle (Supply mode only, for collateral-enabled assets) */}
-      {mode === 'supply' && (
+      {/* Collateral Toggle (Supply mode only, for cWETH only) */}
+      {mode === 'supply' && asset.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase() && (
         <td style={{ textAlign: 'center' }}>
-          {asset.isCollateral ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-              <Tooltip
-                title={isPending ? "Processing..." : isCollateralEnabled ? "Click to disable as collateral" : "Click to enable as collateral"}
-                arrow
-              >
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={isCollateralEnabled || false}
-                      onChange={handleToggleCollateral}
-                      disabled={isLoadingStatus || isPending}
-                      size="small"
-                      onClick={(e) => e.stopPropagation()}
-                      sx={{
-                        '& .MuiSwitch-switchBase.Mui-checked': {
-                          color: '#4caf50',
-                        },
-                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                          backgroundColor: '#4caf50',
-                        },
-                      }}
-                    />
-                  }
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      {isCollateralEnabled ? (
-                        <LockOpen sx={{ fontSize: '1rem', color: '#4caf50' }} />
-                      ) : (
-                        <Lock sx={{ fontSize: '1rem', opacity: 0.5 }} />
-                      )}
-                      <Typography variant="caption" sx={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                        Collateral
-                      </Typography>
-                    </Box>
-                  }
-                  labelPlacement="end"
-                  sx={{ m: 0 }}
-                />
-              </Tooltip>
-              {isPending && (
-                <CircularProgress size={16} sx={{ color: '#2196f3' }} />
-              )}
-            </Box>
-          ) : (
-            <Typography variant="body2" sx={{ opacity: 0.6 }}>
-              —
-            </Typography>
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            <Tooltip
+              title={isToggling ? "Processing..." : localCollateralEnabled ? "Click to disable as collateral" : "Click to enable as collateral"}
+              arrow
+            >
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={localCollateralEnabled}
+                    onChange={handleToggleCollateral}
+                    disabled={isToggling}
+                    size="small"
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{
+                      '& .MuiSwitch-switchBase.Mui-checked': {
+                        color: '#4caf50',
+                      },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                        backgroundColor: '#4caf50',
+                      },
+                    }}
+                  />
+                }
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {localCollateralEnabled ? (
+                      <LockOpen sx={{ fontSize: '1rem', color: '#4caf50' }} />
+                    ) : (
+                      <Lock sx={{ fontSize: '1rem', opacity: 0.5 }} />
+                    )}
+                    <Typography variant="caption" sx={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                      Collateral {localCollateralEnabled ? 'Enabled' : 'Disabled'}
+                    </Typography>
+                  </Box>
+                }
+                labelPlacement="end"
+                sx={{ m: 0 }}
+              />
+            </Tooltip>
+            {isToggling && (
+              <CircularProgress size={16} sx={{ color: '#2196f3' }} />
+            )}
+          </Box>
         </td>
       )}
 
@@ -568,7 +532,9 @@ export default function DynamicAssetSelector({
               {mode === 'supply' && <th style={{ width: '100px', textAlign: 'center' }}>Collateral</th>}
               <th style={{ width: '100px', textAlign: 'center' }}>APY</th>
               <th style={{ width: '120px', textAlign: 'center' }}>Price</th>
-              {mode === 'supply' && <th style={{ width: '140px', textAlign: 'center' }}>Collateral Toggle</th>}
+              {mode === 'supply' && assets.some(asset => asset.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase()) && (
+                <th style={{ width: '140px', textAlign: 'center' }}>Collateral Toggle</th>
+              )}
               <th style={{ width: '100px' }}>Action</th>
             </tr>
           </thead>

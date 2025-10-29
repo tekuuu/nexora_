@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAccount, useBalance, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useReadContract, useConfig } from 'wagmi';
+import { useQueryClient } from '@tanstack/react-query';
 import isEqual from 'fast-deep-equal';
 import { ConnectKitButton } from 'connectkit';
 // Pool hooks - Updated to work with new Pool
@@ -256,7 +257,7 @@ const ERC20_ABI = [
   }
 ] as const;
 
-export default function Dashboard() {
+export default function Dashboard(): JSX.Element {
   // Prevent hydration mismatch by only rendering after client mount
   const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
@@ -279,6 +280,7 @@ export default function Dashboard() {
     address: address,
   });
   const config = useConfig();
+  const queryClient = useQueryClient();
 
   // Debug balance data
   useEffect(() => {
@@ -331,18 +333,7 @@ export default function Dashboard() {
   //   isLoadingSupplied
   // } = useSmartBalances(masterSignature, getMasterSignature);
 
-  // Pool position hook - Updated to work with Pool's getUserSuppliedBalance
-  const {
-    suppliedBalance,
-    isDecrypting: isDecryptingSupplied,
-    hasSupplied,
-    refetchEncryptedShares
-  } = useSuppliedBalance(
-    CONTRACTS.CONFIDENTIAL_WETH, // Asset address
-    'cWETH', // Symbol
-    masterSignature,
-    getMasterSignature
-  );
+  // Pool position hook - Updated to work with Pool's getUserSuppliedBalance (removed single cWETH hook, using map instead)
 
   // Borrowed balances across borrowable assets (for Borrow positions list)
   const {
@@ -459,7 +450,11 @@ export default function Dashboard() {
   const [collateralRefreshTrigger, setCollateralRefreshTrigger] = useState(0);
 
   useEffect(() => {
-    const onToggled = () => setCollateralRefreshTrigger(c => c + 1);
+    const onToggled = (event: any) => {
+      console.log('🎯 Collateral toggled event received:', event.detail);
+      // Immediately trigger a refresh instead of waiting for debounce
+      setCollateralRefreshTrigger(c => c + 1);
+    };
     window.addEventListener('collateralToggled', onToggled as EventListener);
     return () => window.removeEventListener('collateralToggled', onToggled as EventListener);
   }, []);
@@ -574,7 +569,7 @@ export default function Dashboard() {
     prevDepsRef.current = currentDeps;
 
     let mounted = true;
-    const CONTRACTS = getSafeContractAddresses();
+    const safeContracts = getSafeContractAddresses();
     const POOL_ABI = [
       {
         "inputs": [
@@ -599,7 +594,8 @@ export default function Dashboard() {
         return;
       }
 
-      if (!CONTRACTS || !CONTRACTS.POOL_ADDRESS) {
+      const poolAddr = (safeContracts?.POOL_ADDRESS as `0x${string}`) || (CONTRACTS.LENDING_POOL as `0x${string}`);
+      if (!poolAddr) {
         // No pool address available; default to empty map
         if (mounted) setUserCollateralEnabledBySymbol({});
         isFetchingRef.current = false;
@@ -610,7 +606,7 @@ export default function Dashboard() {
         const entries = await Promise.all(supplyAssets.map(async (asset) => {
           try {
             const res = await readContract(config, {
-              address: CONTRACTS.POOL_ADDRESS as `0x${string}`,
+              address: poolAddr,
               abi: POOL_ABI,
               functionName: 'userCollateralEnabled',
               args: [address as `0x${string}`, asset.address as `0x${string}`],
@@ -628,6 +624,7 @@ export default function Dashboard() {
         }
         const map: Record<string, boolean> = {};
         entries.forEach(([sym, enabled]) => { map[sym] = enabled; });
+        console.log('🔄 Collateral state updated:', map);
         setUserCollateralEnabledBySymbol(map);
       } catch (err) {
         console.error('Failed to fetch user collateral flags:', err);
@@ -642,9 +639,17 @@ export default function Dashboard() {
       clearTimeout(timeoutRef.current);
     }
 
-    timeoutRef.current = setTimeout(() => {
-      fetchFlags();
-    }, 5000); // 5 second debounce
+    // Invalidate existing queries to ensure fresh data
+    if (address && supplyAssets.length > 0) {
+      const poolAddr = (safeContracts?.POOL_ADDRESS as `0x${string}`) || (CONTRACTS.LENDING_POOL as `0x${string}`);
+      if (poolAddr) {
+        queryClient.invalidateQueries({ queryKey: ['readContract', poolAddr] });
+      }
+    }
+
+    // Always fetch immediately to ensure fresh onchain data
+    console.log('🔄 Fetching collateral state from onchain');
+    fetchFlags();
 
     return () => {
       if (timeoutRef.current) {
@@ -724,6 +729,7 @@ export default function Dashboard() {
   // Move theme state to context (useTheme hook)
   const { isDarkMode, toggleTheme } = useTheme();
   const [isSwapCompleted, setIsSwapCompleted] = useState(false); // Local state to override wagmi pending states
+  const [lastSwapAmount, setLastSwapAmount] = useState('');
 
   // Swap functionality hooks
   const { writeContract: writeSwapContract, writeContractAsync, data: swapHash, isPending: isSwapPending, error: swapError, reset: resetSwapWrite } = useWriteContract();
@@ -747,7 +753,7 @@ export default function Dashboard() {
   }, []);
 
   // Check if any decryption is in progress
-  const isAnyDecrypting = isDecryptingSupplied || cwethBalance.isDecrypting || cusdcBalance.isDecrypting || isDecryptingShares || isMasterDecrypting || isDecryptingTVL;
+  const isAnyDecrypting = cwethBalance.isDecrypting || cusdcBalance.isDecrypting || isMasterDecrypting || isDecryptingTVL;
 
   // Initialize FHE on component mount
   useEffect(() => {
@@ -776,7 +782,6 @@ export default function Dashboard() {
     console.log('🔄 Refreshing all blockchain data including TVL...');
     try {
       await Promise.all([
-        refetchEncryptedShares(),
         refetchWETHBalance(),
         refetchUSDCBalance(),
         cwethBalance.forceRefresh(),
@@ -791,7 +796,6 @@ export default function Dashboard() {
       console.error('❌ Error refreshing blockchain data:', error);
     }
   }, [
-    refetchEncryptedShares,
     refetchWETHBalance,
     refetchUSDCBalance,
     // include the stable function references for confidential balance refresh
@@ -902,6 +906,7 @@ export default function Dashboard() {
       console.log('✅ Swap transaction successful!');
       console.log('🎯 Setting swapSuccess to true');
       setSwapSuccess(true);
+      setLastSwapAmount(swapAmount);
       setSwapAmount('');
       setSwapTransactionError(null);
       setSwapUserCancelled(false);
@@ -1616,13 +1621,38 @@ export default function Dashboard() {
       setShowBalanceError(false);
     }
   };
-
-
+ 
+  const getReverseSwapErrorMessage = useCallback((): string => {
+    if (selectedToken === 'WETH') {
+      if (!cwethBalance.hasConfidentialToken) return 'You have no cWETH to swap';
+      if (cwethBalance.isDecrypted && cwethBalance.hasConfidentialToken) {
+        const confidentialAmount = parseFloat(cwethBalance.formattedBalance.replace(' cWETH', ''));
+        return `Amount exceeds your balance of ${confidentialAmount.toFixed(4)} cWETH`;
+      }
+      return 'Please decrypt your cWETH balance first to check available amount';
+    } else if (selectedToken === 'USDC') {
+      if (!cusdcBalance.hasConfidentialToken) return 'You have no cUSDC to swap';
+      if (cusdcBalance.isDecrypted && cusdcBalance.hasConfidentialToken) {
+        const confidentialAmount = parseFloat(cusdcBalance.formattedBalance.replace(' cUSDC', ''));
+        return `Amount exceeds your balance of ${confidentialAmount.toFixed(4)} cUSDC`;
+      }
+      return 'Please decrypt your cUSDC balance first to check available amount';
+    } else if (selectedToken === 'DAI') {
+      if (!cdaiBalance.hasConfidentialToken) return 'You have no cDAI to swap';
+      if (cdaiBalance.isDecrypted && cdaiBalance.hasConfidentialToken) {
+        const confidentialAmount = parseFloat(cdaiBalance.formattedBalance.replace(' cDAI', ''));
+        return `Amount exceeds your balance of ${confidentialAmount.toFixed(4)} cDAI`;
+      }
+      return 'Please decrypt your cDAI balance first to check available amount';
+    }
+    return 'You have no confidential tokens to swap';
+  }, [selectedToken, cwethBalance, cusdcBalance, cdaiBalance]);
+ 
   // Prevent hydration mismatch - only render after mount
   if (!isMounted) {
-    return null;
+    return <></>;
   }
-
+ 
   return (
     <>
       {/* Notification Banner */}
@@ -2451,7 +2481,7 @@ export default function Dashboard() {
                           <Tooltip title="Total number of active supply and borrow positions" arrow placement="top">
                             <Card sx={{ p: { xs: 2, sm: 3 }, borderRadius: '8px', background: isDarkMode ? 'linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.02) 100%)' : 'linear-gradient(135deg, rgba(139,92,246,0.03) 0%, rgba(139,92,246,0.01) 100%)', border: `2px solid ${isDarkMode ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.08)'}`, '&:hover': { transform: 'scale(1.02)', transition: 'all 0.3s ease' } }}>
                               <Box display="flex" alignItems="center" gap={2}>
-                                <AccountBalance sx={{ fontSize: 40, color: '#8b5cf6', opacity: 0.9 }} />
+                               
                                 <Box>
                                   <Typography variant="body2" sx={{ opacity: isDarkMode ? 0.9 : 0.8 }}>Active Positions</Typography>
                                   <Typography variant="h4" sx={{ fontWeight: 600 }}>{activePositionsCount}</Typography>
@@ -2842,7 +2872,7 @@ export default function Dashboard() {
                     }}
                   >
                     <Typography variant="body2" sx={{ fontFamily: 'sans-serif' }}>
-                      Successfully swapped {swapAmount} {isReversed ? 'cWETH to ETH' : 'ETH to cWETH'}!
+                      Successfully swapped {lastSwapAmount} {isReversed ? `c${selectedToken} to ${selectedToken}` : `${selectedToken} to c${selectedToken}`}!
                     </Typography>
                   </Alert>
                 )}
@@ -3116,20 +3146,7 @@ export default function Dashboard() {
                         fontSize: '12px',
                         fontWeight: '600'
                       }}>
-                        {selectedToken === 'WETH' 
-                          ? (!cwethBalance.hasConfidentialToken 
-                          ? 'You have no cWETH to swap'
-                              : cwethBalance.isDecrypted && cwethBalance.hasConfidentialToken 
-                                ? `Amount exceeds your balance of ${parseFloat(cwethBalance.formattedBalance.replace(' cWETH', '')).toFixed(4)} cWETH`
-                                : 'Please decrypt your cWETH balance first to check available amount')
-                          : selectedToken === 'USDC' 
-                            ? (!cusdcBalance.hasConfidentialToken 
-                                ? 'You have no cUSDC to swap'
-                                : cusdcBalance.isDecrypted && cusdcBalance.hasConfidentialToken 
-                                  ? `Amount exceeds your balance of ${parseFloat(cusdcBalance.formattedBalance.replace(' cUSDC', '')).toFixed(4)} cUSDC`
-                                  : 'Please decrypt your cUSDC balance first to check available amount')
-                            : 'You have no confidential tokens to swap'
-                        }
+                        {getReverseSwapErrorMessage()}
                       </Typography>
                     </Box>
                   )}
@@ -3274,13 +3291,13 @@ export default function Dashboard() {
           justifyContent: 'center',
           zIndex: 9999
         }}>
-          <WithdrawForm 
+          <WithdrawForm
             onTransactionSuccess={handleWithdrawSuccess}
             selectedAsset={selectedAsset}
             onClose={() => setShowWithdrawModal(false)}
-            suppliedBalance={suppliedBalance}
-            hasSupplied={hasSupplied}
-            isDecrypted={isDecryptingSupplied}
+            suppliedBalance={suppliedBalancesMap[selectedAsset?.symbol]?.formattedSupplied || '••••••••'}
+            hasSupplied={suppliedBalancesMap[selectedAsset?.symbol]?.hasSupplied || false}
+            isDecrypted={suppliedBalancesMap[selectedAsset?.symbol]?.isDecrypted || false}
           />
         </Box>
       )}
@@ -3562,7 +3579,7 @@ export default function Dashboard() {
             </Box>
             <Typography variant="body2" sx={{ 
               color: isDarkMode ? 'white' : '#000000', 
-              fontWeight: isDarkMode ? '500' : '400', 
+              fontWeight: isDarkMode ? '500' : '400',
               fontSize: '0.8rem' 
             }}>
               {balance && balance.formatted ? `${parseFloat(balance.formatted).toFixed(4)} ETH` : 

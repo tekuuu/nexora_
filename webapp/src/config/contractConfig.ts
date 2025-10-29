@@ -8,12 +8,13 @@ export const LATEST_CONTRACTS = {
   SEPOLIA: {
     // ✨ DEPLOYMENT #12 - DEBT CONVERSION BUG FIXED (correct source asset parameters)
     POOL_ADDRESS: '0x3945b869813189f9d220F9b80478AA5eEd5415E6',
-    
+
     // Confidential tokens (✨ decimals() override + no aggregation)
     CONFIDENTIAL_WETH: '0x4166b48d16e0DC31B10D7A1247ACd09f01632cBC',
+    CWETH_ADDRESS: '0x4166b48d16e0DC31B10D7A1247ACd09f01632cBC', // Confidential WETH
     CONFIDENTIAL_USDC: '0xc323ccD9FcD6AfC3a0D568E4a6E522c41aEE04C4',
     CONFIDENTIAL_DAI: '0xd57a787BfDb9C86c0B1E0B5b7a316f8513F2E0D1',
-    
+
     CHAIN_ID: 11155111,
   },
   // Add other networks as needed
@@ -22,7 +23,7 @@ export const LATEST_CONTRACTS = {
 // Environment variable overrides (for development/testing)
 const ENV_CONTRACTS = {
   POOL_ADDRESS: '0x3945b869813189f9d220F9b80478AA5eEd5415E6',  // ✨ DEPLOYMENT #12 - DEBT CONVERSION BUG FIXED
-  CWETH_ADDRESS: process.env.NEXT_PUBLIC_CWETH_ADDRESS,
+  CWETH_ADDRESS: '0x4166b48d16e0DC31B10D7A1247ACd09f01632cBC', // Confidential WETH
   CHAIN_ID: process.env.NEXT_PUBLIC_CHAIN_ID ? parseInt(process.env.NEXT_PUBLIC_CHAIN_ID) : 11155111,
 } as const;
 

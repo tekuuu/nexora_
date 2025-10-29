@@ -16,6 +16,7 @@ import {
   CardContent,
   Divider,
   Chip,
+  useTheme,
 } from '@mui/material';
 import { Send, AccountBalance } from '@mui/icons-material';
 import { getFHEInstance } from '../utils/fhe';
@@ -38,10 +39,10 @@ interface WithdrawFormProps {
   onClose?: () => void;
 }
 
-export default function WithdrawForm({ 
-  onTransactionSuccess, 
-  suppliedBalance: propSuppliedBalance, 
-  hasSupplied: propHasSupplied, 
+export default function WithdrawForm({
+  onTransactionSuccess,
+  suppliedBalance: propSuppliedBalance,
+  hasSupplied: propHasSupplied,
   isDecrypted: propIsDecrypted,
   selectedAsset,
   onClose
@@ -49,12 +50,15 @@ export default function WithdrawForm({
   const { address, isConnected } = useAccount();
   const { writeContract, data: hash, isPending, error, reset: resetWrite } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
-  
+
   // Master decryption hook
   const { masterSignature, getMasterSignature } = useMasterDecryption();
-  
+
   // Gas fee hook for real network fees
   const { calculateNetworkFee, isLoading: isGasLoading, getGasPriceInGwei } = useGasFee();
+
+  // Theme hook for styling
+  const theme = useTheme();
   
   // Use selected asset or default to cWETH
   const asset = selectedAsset || {
@@ -318,7 +322,17 @@ export default function WithdrawForm({
 
 
   return (
-    <Box sx={{ maxWidth: 350, mx: 'auto', p: 1, position: 'relative' }}>
+    <Box sx={{
+      maxWidth: 350,
+      mx: 'auto',
+      p: 1,
+      position: 'relative',
+      backgroundColor: 'background.paper',
+      borderRadius: 1,
+      boxShadow: 3,
+      border: '1px solid',
+      borderColor: 'divider'
+    }}>
       {/* Close Button */}
       <Button
         onClick={() => {
