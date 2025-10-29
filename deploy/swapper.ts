@@ -13,9 +13,9 @@ const deploySwapper: DeployFunction = async function (hre: HardhatRuntimeEnviron
   const WETH_ADDRESS = '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9';
   const USDC_ADDRESS = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
   const DAI_ADDRESS = '0x75236711d42D0f7Ba91E03fdCe0C9377F5b76c07';
-  const CWETH_ADDRESS = '0xcA185E2f8eCC2c83Ea2B3A256e334b103293d705';  // ✨ DEPLOY #6 (18 decimals)
-  const CUSDC_ADDRESS = '0x4CBBcaEbe5f295CEdB7B72F5c2e29593Bf034641';  // ✨ DEPLOY #6 (6 decimals)
-  const CDAI_ADDRESS = '0x7a7b8537497e232aBA0563FDEF9B90E4Dcd27aB5';   // ✨ DEPLOY #6 (18 decimals)
+  const CWETH_ADDRESS = '0x4166b48d16e0DC31B10D7A1247ACd09f01632cBC';  // ✨ DEPLOY #6 (18 decimals)
+  const CUSDC_ADDRESS = '0xc323ccD9FcD6AfC3a0D568E4a6E522c41aEE04C4';  // ✨ DEPLOY #6 (6 decimals)
+  const CDAI_ADDRESS = '0xd57a787BfDb9C86c0B1E0B5b7a316f8513F2E0D1';   // ✨ DEPLOY #6 (18 decimals)
 
   // Deploy the swapper contract (single-transaction, no Gateway dependency)
   const swapper = await deploy('ConfidentialTokenSwapper', {

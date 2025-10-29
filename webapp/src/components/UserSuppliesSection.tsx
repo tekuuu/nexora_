@@ -28,7 +28,6 @@ import { Send, CheckCircle, Cancel, Warning } from '@mui/icons-material';
 import type { SuppliedBalance } from '../hooks/useSuppliedBalances';
 import type { AvailableAsset } from '../hooks/useAvailableReserves';
 import { formatUnits } from 'viem';
-import { CONTRACTS } from '../config/contracts';
 
 interface UserSuppliesSectionProps {
   suppliedBalances: Record<string, SuppliedBalance>;
@@ -37,13 +36,10 @@ interface UserSuppliesSectionProps {
   onWithdrawClick: (asset: { address: string; symbol: string; decimals: number; name: string; icon: string; color: string }) => void;
   onCollateralToggle: (asset: { address: string; symbol: string }, enabled: boolean) => void | Promise<void>;
   isLoadingSupplied: boolean;
-  isLoadingCollateral: boolean;
   isDarkMode: boolean;
   onNavigateToMarkets?: () => void;
   // Optional callback to check whether a symbol has active borrows (used to require confirmation before disabling collateral)
   hasActiveBorrowsForSymbol?: (symbol: string) => boolean;
-  // Whether collateral data has been loaded from smart contract
-  isCollateralDataLoaded?: boolean;
 }
 
 const calculateUSDValue = (raw: bigint | null | undefined, decimals: number, price: number | undefined) => {
@@ -71,14 +67,14 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
   onWithdrawClick,
   onCollateralToggle,
   isLoadingSupplied,
-  isLoadingCollateral,
   isDarkMode,
   onNavigateToMarkets,
   hasActiveBorrowsForSymbol,
-  isCollateralDataLoaded = false,
 }) => {
   const theme = useTheme();
   const [collateralToggling, setCollateralToggling] = useState<Record<string, boolean>>({});
+  // Local optimistic state per-symbol to avoid flicker while parent updates arrive
+  const [optimisticCollateral, setOptimisticCollateral] = useState<Record<string, boolean>>({});
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmDialogAsset, setConfirmDialogAsset] = useState<{ address: string; symbol: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -95,7 +91,7 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
         rawSupplied: (bal as SuppliedBalance).rawSupplied,
         isDecrypted: (bal as SuppliedBalance).isDecrypted,
         usdValue: asset ? calculateUSDValue((bal as SuppliedBalance).rawSupplied, asset.decimals, asset.price) : null,
-        isCollateralEnabled: isCollateralDataLoaded ? Boolean(userCollateralEnabled?.[symbol]) : Boolean(asset?.isCollateral),
+        isCollateralEnabled: userCollateralEnabled ? Boolean(userCollateralEnabled[symbol]) : Boolean(asset?.isCollateral),
         icon: asset?.icon || '/assets/icons/unknown-token.svg',
         color: asset?.color || '#627EEA',
         name: asset?.name || symbol,
@@ -114,6 +110,8 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
   }, [suppliedBalances, assets, userCollateralEnabled]);
 
   const handleToggle = useCallback(async (asset: { address: string; symbol: string }, enabled: boolean) => {
+    // Optimistically update UI immediately to prevent toggle flicker
+    setOptimisticCollateral(s => ({ ...s, [asset.symbol]: enabled }));
     try {
       setCollateralToggling(s => ({ ...s, [asset.symbol]: true }));
 
@@ -123,6 +121,8 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
       // success - parent is expected to refresh authoritative state
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : String(err);
+      // revert optimistic state on error
+      setOptimisticCollateral(s => ({ ...s, [asset.symbol]: !enabled }));
       if (!msg.toLowerCase().includes('cancel')) {
         setErrorMessage(msg);
       }
@@ -131,7 +131,44 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
     }
   }, [onCollateralToggle]);
 
+  // Seed optimistic state for any symbols we don't yet know about. Don't overwrite keys that
+  // already exist to preserve user interactions in-flight.
+  // IMPORTANT: Avoid infinite update loops by only updating state when there is an actual change.
+  useEffect(() => {
+    setOptimisticCollateral(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of positions) {
+        if (!(p.symbol in next)) {
+          next[p.symbol] = p.isCollateralEnabled;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [positions]);
 
+  // Sync optimistic state to authoritative server flags when they arrive,
+  // so the toggle doesn't visually revert while the contract has the correct value.
+  useEffect(() => {
+    if (!userCollateralEnabled) return;
+    setOptimisticCollateral(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of positions) {
+        if (Object.prototype.hasOwnProperty.call(userCollateralEnabled, p.symbol)) {
+          // Do not overwrite while a toggle is in-flight for this symbol
+          if (collateralToggling[p.symbol]) continue;
+          const authoritative = Boolean(userCollateralEnabled[p.symbol]);
+          if (next[p.symbol] !== authoritative) {
+            next[p.symbol] = authoritative;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [userCollateralEnabled, positions, collateralToggling]);
 
   const requestToggle = (asset: { address: string; symbol: string }, enabled: boolean) => {
     // If disabling, only show confirmation when the user has active borrows for this asset
@@ -157,7 +194,7 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
     setConfirmDialogAsset(null);
   };
 
-  if (isLoadingSupplied || isLoadingCollateral) {
+  if (isLoadingSupplied) {
     return (
       <Box>
         {[1,2,3].map(i => (
@@ -205,9 +242,7 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
               <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000', fontWeight: 'bold' }}>Balance</TableCell>
               <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000', fontWeight: 'bold' }}>Value (USD)</TableCell>
               <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000', fontWeight: 'bold' }}>APY</TableCell>
-              {positions.some(p => p.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase()) && (
-                <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000', fontWeight: 'bold' }}>Collateral</TableCell>
-              )}
+              <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000', fontWeight: 'bold' }}>Collateral</TableCell>
               <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000', fontWeight: 'bold' }}></TableCell>
             </TableRow>
           </TableHead>
@@ -233,6 +268,7 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
                 <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
                   <Box>
                     <Typography sx={{ color: isDarkMode ? 'white' : '#000000' }}>{p.isDecrypted ? p.formattedSupplied : '••••••••'}</Typography>
+                    <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>{p.isDecrypted ? 'Decrypted' : 'Encrypted'}</Typography>
                   </Box>
                 </TableCell>
 
@@ -250,47 +286,51 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
                   }} />
                 </TableCell>
 
-                {positions.some(pos => pos.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase()) && (
-                  <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
-                    {p.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase() ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center' }}>
-                        <Switch
-                          key={p.symbol}
-                          checked={isCollateralDataLoaded ? Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false) : p.isCollateralEnabled}
-                          onChange={() => {
-                            const current = isCollateralDataLoaded ? Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false) : p.isCollateralEnabled;
-                            requestToggle({ address: p.address, symbol: p.symbol }, !current);
-                          }}
-                          inputProps={{ 'aria-label': `Toggle collateral for ${p.symbol}` }}
-                          disabled={Boolean(collateralToggling[p.symbol])}
-                          sx={{
-                            '& .MuiSwitch-switchBase': {
-                              color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
-                              '&.Mui-checked': {
-                                color: isDarkMode ? '#2196f3' : '#1976d2',
-                                '& + .MuiSwitch-track': {
-                                  backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.5)' : 'rgba(25, 118, 210, 0.5)',
-                                }
-                              },
-                              '&.Mui-disabled': {
-                                color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
-                                '& + .MuiSwitch-track': {
-                                  backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                                }
-                              }
-                            },
-                            '& .MuiSwitch-track': {
-                              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center' }}>
+                    <Switch
+                      checked={
+                        collateralToggling[p.symbol]
+                          ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
+                          : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
+                            ? Boolean(userCollateralEnabled[p.symbol])
+                            : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
+                      }
+                      onChange={() => {
+                        const effectiveCurrent =
+                          collateralToggling[p.symbol]
+                            ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
+                            : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
+                              ? Boolean(userCollateralEnabled[p.symbol])
+                              : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled);
+                        requestToggle({ address: p.address, symbol: p.symbol }, !effectiveCurrent);
+                      }}
+                      inputProps={{ 'aria-label': `Toggle collateral for ${p.symbol}` }}
+                      disabled={Boolean(collateralToggling[p.symbol])}
+                      sx={{
+                        '& .MuiSwitch-switchBase': {
+                          color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
+                          '&.Mui-checked': {
+                            color: isDarkMode ? '#2196f3' : '#1976d2',
+                            '& + .MuiSwitch-track': {
+                              backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.5)' : 'rgba(25, 118, 210, 0.5)',
                             }
-                          }}
-                        />
-                        {collateralToggling[p.symbol] && <CircularProgress size={16} />}
-                      </Box>
-                    ) : (
-                      <Box />
-                    )}
-                  </TableCell>
-                )}
+                          },
+                          '&.Mui-disabled': {
+                            color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                            '& + .MuiSwitch-track': {
+                              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                            }
+                          }
+                        },
+                        '& .MuiSwitch-track': {
+                          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                        }
+                      }}
+                    />
+                    {collateralToggling[p.symbol] && <CircularProgress size={16} />}
+                  </Box>
+                </TableCell>
 
                 <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
                   <Button size="small" variant="outlined" onClick={() => onWithdrawClick({ address: p.address, symbol: p.symbol, decimals: p.decimals, name: p.name, icon: p.icon, color: p.color })} disabled={Boolean(collateralToggling[p.symbol])} aria-label={`Withdraw ${p.symbol}`} sx={{
@@ -351,43 +391,49 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>Collateral</Typography>
-                  {p.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase() ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Switch
-                        key={p.symbol}
-                        checked={isCollateralDataLoaded ? Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false) : p.isCollateralEnabled}
-                        onChange={() => {
-                          const current = isCollateralDataLoaded ? Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false) : p.isCollateralEnabled;
-                          requestToggle({ address: p.address, symbol: p.symbol }, !current);
-                        }}
-                        disabled={Boolean(collateralToggling[p.symbol])}
-                        inputProps={{ 'aria-label': `Toggle collateral for ${p.symbol}` }}
-                        sx={{
-                          '& .MuiSwitch-switchBase': {
-                            color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
-                            '&.Mui-checked': {
-                              color: isDarkMode ? '#2196f3' : '#1976d2',
-                              '& + .MuiSwitch-track': {
-                                backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.5)' : 'rgba(25, 118, 210, 0.5)',
-                              }
-                            },
-                            '&.Mui-disabled': {
-                              color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
-                              '& + .MuiSwitch-track': {
-                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                              }
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Switch
+                      checked={
+                        collateralToggling[p.symbol]
+                          ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
+                          : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
+                            ? Boolean(userCollateralEnabled[p.symbol])
+                            : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
+                      }
+                      onChange={() => {
+                        const effectiveCurrent =
+                          collateralToggling[p.symbol]
+                            ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
+                            : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
+                              ? Boolean(userCollateralEnabled[p.symbol])
+                              : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled);
+                        requestToggle({ address: p.address, symbol: p.symbol }, !effectiveCurrent);
+                      }}
+                      disabled={Boolean(collateralToggling[p.symbol])}
+                      inputProps={{ 'aria-label': `Toggle collateral for ${p.symbol}` }}
+                      sx={{
+                        '& .MuiSwitch-switchBase': {
+                          color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
+                          '&.Mui-checked': {
+                            color: isDarkMode ? '#2196f3' : '#1976d2',
+                            '& + .MuiSwitch-track': {
+                              backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.5)' : 'rgba(25, 118, 210, 0.5)',
                             }
                           },
-                          '& .MuiSwitch-track': {
-                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                          '&.Mui-disabled': {
+                            color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                            '& + .MuiSwitch-track': {
+                              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                            }
                           }
-                        }}
-                      />
-                      {collateralToggling[p.symbol] && <CircularProgress size={16} />}
-                    </Box>
-                  ) : (
-                    <Typography sx={{ color: isDarkMode ? 'white' : '#000000' }}>—</Typography>
-                  )}
+                        },
+                        '& .MuiSwitch-track': {
+                          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                        }
+                      }}
+                    />
+                    {collateralToggling[p.symbol] && <CircularProgress size={16} />}
+                  </Box>
                 </Grid>
               </Grid>
 

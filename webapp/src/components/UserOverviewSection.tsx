@@ -46,9 +46,9 @@ const calculateTotalUSD = (
     }
 
     const asset = assets.find((a) => a.symbol === symbol);
-    if (!asset || !(balance as any)[balanceKey]) continue;
+    if (!asset || !balance[balanceKey]) continue;
 
-    const rawValue = (balance as any)[balanceKey] as bigint;
+    const rawValue = balance[balanceKey] as bigint;
     const tokenAmount = Number(formatUnits(rawValue, asset.decimals));
     const usdValue = tokenAmount * asset.price;
     totalUSD += usdValue;
@@ -191,7 +191,7 @@ const UserOverviewSection: React.FC<UserOverviewSectionProps> = ({
         <Card sx={cardSx(isDarkMode)}>
           <CardContent>
             <Box display="flex" alignItems="center" gap={2}>
-            
+              <AccountBalanceWallet fontSize="large" />
               <Typography variant="body2" color="text.secondary">
                 Net Worth
               </Typography>
@@ -206,6 +206,7 @@ const UserOverviewSection: React.FC<UserOverviewSectionProps> = ({
         <Card sx={cardSx(isDarkMode)}>
           <CardContent>
             <Box display="flex" alignItems="center" gap={2}>
+              <TrendingUp fontSize="large" color="success" />
               <Typography variant="body2" color="text.secondary">
                 Total Supply
               </Typography>
@@ -220,6 +221,7 @@ const UserOverviewSection: React.FC<UserOverviewSectionProps> = ({
         <Card sx={cardSx(isDarkMode)}>
           <CardContent>
             <Box display="flex" alignItems="center" gap={2}>
+              <TrendingDown fontSize="large" color="error" />
               <Typography variant="body2" color="text.secondary">
                 Total Borrow
               </Typography>
@@ -234,6 +236,7 @@ const UserOverviewSection: React.FC<UserOverviewSectionProps> = ({
         <Card sx={cardSx(isDarkMode)}>
           <CardContent>
             <Box display="flex" alignItems="center" gap={2}>
+              <HealthAndSafety fontSize="large" />
               <Typography variant="body2" color="text.secondary">
                 Health Factor
               </Typography>

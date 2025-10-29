@@ -67,6 +67,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleDisconnect = () => {
     disconnect();
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const keys = Object.keys(localStorage || {});
+        for (const k of keys) {
+          if (k && k.startsWith('wagmi')) {
+            localStorage.removeItem(k);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to clear wagmi localStorage keys on admin disconnect', e);
+    }
     setWalletMenuAnchor(null);
     router.push('/');
   };

@@ -299,16 +299,20 @@ export const useConfidentialTokenBalance = (
 
       const decryptedValue = result[encryptedBalanceState];
       if (decryptedValue !== undefined) {
+        const decimals = typeof tokenInfo.decimals === 'number' ? tokenInfo.decimals : 6;
         let tokenValue: number;
         if (typeof decryptedValue === 'bigint') {
-          tokenValue = Number(decryptedValue) / Math.pow(10, tokenInfo.decimals);
+          tokenValue = Number(decryptedValue) / Math.pow(10, decimals);
         } else if (typeof decryptedValue === 'string') {
-          tokenValue = Number(BigInt(decryptedValue)) / Math.pow(10, tokenInfo.decimals);
+          tokenValue = Number(BigInt(decryptedValue)) / Math.pow(10, decimals);
         } else {
           tokenValue = 0;
         }
         
-        const formattedBalance = `${tokenValue.toFixed(8)} c${tokenInfo.symbol}`;
+        const suffix = tokenInfo.symbol && tokenInfo.symbol.startsWith('c')
+          ? tokenInfo.symbol
+          : `c${tokenInfo.symbol}`;
+        const formattedBalance = `${tokenValue.toFixed(8)} ${suffix}`;
         console.log(`✅ Confidential token balance decrypted successfully: ${formattedBalance}`);
         setConfidentialBalance(formattedBalance);
         setHasConfidentialToken(tokenValue > 0);
@@ -362,34 +366,39 @@ export const useConfidentialTokenBalance = (
       // Check if this is a new balance (different from what we had before)
       const isNewBalance = lastEncryptedBalanceRef.current !== balanceData;
       
-      setHasConfidentialToken(hasEncryptedBalance);
-      setEncryptedBalanceState(balanceData);
-      
-      console.log('🔍 Final state update:', {
-        hasEncryptedBalance,
-        balanceData: balanceData ? balanceData.substring(0, 20) + '...' : 'null',
-        tokenSymbol: tokenInfo.symbol
-      });
-      
-      if (!hasEncryptedBalance) {
-        setConfidentialBalance('••••••••');
-        console.log(`🔍 ${tokenInfo.symbol}: No encrypted balance found, setting to dots`);
-        // No balance found
-      } else {
-        setConfidentialBalance('••••••••');
-        console.log(`🔍 ${tokenInfo.symbol}: Encrypted balance found, will decrypt if master signature available`);
+      if (isNewBalance) {
+        setHasConfidentialToken(hasEncryptedBalance);
+        setEncryptedBalanceState(balanceData);
+        lastEncryptedBalanceRef.current = balanceData;
         
-        // If we have a master signature, immediately decrypt any encrypted balance
-        if (masterSignature && !isDecrypting) {
-          console.log('🔄 Encrypted balance detected with master signature - immediately decrypting...');
-          // Small delay to ensure state is updated
-          setTimeout(() => {
-            if (!isDecryptingRef.current) {
-              decryptBalance();
-            }
-          }, 100);
+        console.log('🔍 Final state update:', {
+          hasEncryptedBalance,
+          balanceData: balanceData ? balanceData.substring(0, 20) + '...' : 'null',
+          tokenSymbol: tokenInfo.symbol
+        });
+        
+        if (!hasEncryptedBalance) {
+          setConfidentialBalance('••••••••');
+          console.log(`🔍 ${tokenInfo.symbol}: No encrypted balance found, setting to dots`);
+          // No balance found
+        } else {
+          setConfidentialBalance('••••••••');
+          console.log(`🔍 ${tokenInfo.symbol}: Encrypted balance found, will decrypt if master signature available`);
+          
+          // If we have a master signature and the balance has changed, decrypt
+          if (masterSignature && !isDecrypting) {
+            console.log('🔄 Encrypted balance detected with master signature - immediately decrypting...');
+            // Small delay to ensure state is updated
+            setTimeout(() => {
+              if (!isDecryptingRef.current) {
+                decryptBalance();
+              }
+            }, 100);
+          }
+          // Balance found
         }
-        // Balance found
+      } else {
+        console.log(`🔍 ${tokenInfo.symbol}: Balance unchanged, skipping update`);
       }
     } else {
       // No encrypted balance data

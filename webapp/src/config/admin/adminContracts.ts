@@ -194,9 +194,9 @@ export const ADMIN_CONTRACTS = {
 
 // Reserve tokens
 export const RESERVE_TOKENS = [
-  { name: 'cWETH', address: CONTRACTS.CONFIDENTIAL_WETH, symbol: 'cWETH', decimals: 18 },
+  { name: 'cWETH', address: CONTRACTS.CONFIDENTIAL_WETH, symbol: 'cWETH', decimals: 6 },
   { name: 'cUSDC', address: CONTRACTS.CONFIDENTIAL_USDC, symbol: 'cUSDC', decimals: 6 },
-  { name: 'cDAI', address: CONTRACTS.CONFIDENTIAL_DAI, symbol: 'cDAI', decimals: 18 },
+  { name: 'cDAI', address: CONTRACTS.CONFIDENTIAL_DAI, symbol: 'cDAI', decimals: 6 },
 ] as const;
 
 

@@ -42,7 +42,6 @@ export interface ConfidentialWETHInterface extends Interface {
       | "discloseEncryptedAmount"
       | "finalizeDiscloseEncryptedAmount"
       | "getEncryptedBalance"
-      | "getTokenInfo"
       | "isOperator"
       | "mint"
       | "name"
@@ -128,10 +127,6 @@ export interface ConfidentialWETHInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getEncryptedBalance",
     values: [AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getTokenInfo",
-    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "isOperator",
@@ -223,10 +218,6 @@ export interface ConfidentialWETHInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getEncryptedBalance",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getTokenInfo",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "isOperator", data: BytesLike): Result;
@@ -499,18 +490,6 @@ export interface ConfidentialWETH extends BaseContract {
     "view"
   >;
 
-  getTokenInfo: TypedContractMethod<
-    [],
-    [
-      [string, string, bigint] & {
-        name: string;
-        symbol: string;
-        decimals: bigint;
-      }
-    ],
-    "view"
-  >;
-
   isOperator: TypedContractMethod<
     [holder: AddressLike, spender: AddressLike],
     [boolean],
@@ -663,19 +642,6 @@ export interface ConfidentialWETH extends BaseContract {
   getFunction(
     nameOrSignature: "getEncryptedBalance"
   ): TypedContractMethod<[user: AddressLike], [string], "view">;
-  getFunction(
-    nameOrSignature: "getTokenInfo"
-  ): TypedContractMethod<
-    [],
-    [
-      [string, string, bigint] & {
-        name: string;
-        symbol: string;
-        decimals: bigint;
-      }
-    ],
-    "view"
-  >;
   getFunction(
     nameOrSignature: "isOperator"
   ): TypedContractMethod<

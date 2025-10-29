@@ -15,7 +15,9 @@ library Errors {
     // Access control errors
     string public constant ONLY_POOL_ADMIN = "10";
     string public constant ONLY_PRICE_FEED = "11";
-    string public constant UNAUTHORIZED_ACCESS = "12";
+    //string public constant UNAUTHORIZED_ACCESS = "12";
+    string public constant ONLY_EMERGENCY_ADMIN = "12";
+    
     
     // Oracle errors
     string public constant PRICE_NOT_SET = "13";
@@ -54,5 +56,25 @@ library Errors {
     string public constant INVALID_USER_POSITION = '40';
     string public constant USER_POSITION_NOT_INITIALIZED = '41';
     string public constant USER_POSITION_ALREADY_INITIALIZED = '42';
-    string internal constant NO_COLLATERAL_ENABLED = "NO_COLLATERAL_ENABLED";
+    string internal constant NO_COLLATERAL_ENABLED = "43";
+    string internal constant RESERVE_NOT_COLLATERAL = "44";
+    string public constant PROTOCOL_ALREADY_PAUSED = "45";
+    string public constant MULTIPLE_DEBTS_NOT_ALLOWED = "46";
+    string public constant SINGLE_COLLATERAL_ONLY = "47";
+    string public constant INVALID_ASSET_DECIMALS = "48";
+    string public constant SUPPLY_AMOUNT_TOO_LOW = "49";
+    string public constant WITHDRAW_AMOUNT_TOO_LOW = "50";
+    string public constant BORROW_AMOUNT_TOO_LOW = "51";
+    string public constant REPAY_AMOUNT_TOO_LOW = "52";
+    string public constant LIQUIDATION_NOT_ALLOWED = "53";
+    string public constant NO_DEBT_POSITION = "54";
+    string public constant REPAY_AMOUNT_EXCEEDS_DEBT = "55";
+    string public constant INVALID_LIQUIDATOR = "56";
+    string public constant INVALID_COLLATERAL = "57";
+    string public constant PROTOCOL_NOT_PAUSED = "58";
+    string public constant ORACLE_PRICE_ZERO = "59";
+    string public constant ONLY_POOL_CONFIGURATOR = "60";
+    string public constant INVALID_DEBT_REPAYMENT = "61";
+    string public constant NOT_THE_DESIGNATED_COLLATERAL = "62";
+    string public constant RESERVE_NOT_INITIALIZED = "63";
 }

@@ -6,9 +6,9 @@ import { createPublicClient, http, encodeFunctionData } from 'viem';
 import { sepolia } from 'wagmi/chains';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
-import { ethers } from 'ethers';
 import { getSafeContractAddresses } from '../config/contractConfig';
 import { getSepoliaRpcUrls } from '../utils/rpc';
+import { getTokenMetadata } from '../config/tokenMetadata';
 
 // Pool ABI for getting user supplied balance
 const POOL_ABI = [
@@ -26,7 +26,8 @@ const POOL_ABI = [
 
 export const useSuppliedBalance = (
   asset: string, // Asset address (e.g., cWETH)
-  masterSignature: string | null, 
+  symbol: string, // Asset symbol
+  masterSignature: string | null,
   getMasterSignature: () => FhevmDecryptionSignature | null
 ) => {
   const { address, isConnected } = useAccount();
@@ -254,33 +255,37 @@ export const useSuppliedBalance = (
       const decryptedValue = result[encryptedShares];
       console.log('🔍 Raw decrypted value for supplied balance:', decryptedValue, 'Type:', typeof decryptedValue);
       if (decryptedValue !== undefined) {
-        let ethValue: number;
+        // Scale by token's decimals (all confidential assets standardized to 6)
+        const meta = getTokenMetadata(asset);
+        const decimals = meta?.decimals ?? 6;
+
+        let tokenValue: number;
         if (typeof decryptedValue === 'bigint') {
-          ethValue = Number(decryptedValue) / 1e18;
+          tokenValue = Number(decryptedValue) / Math.pow(10, decimals);
         } else if (typeof decryptedValue === 'string') {
-          ethValue = Number(BigInt(decryptedValue)) / 1e18;
+          tokenValue = Number(BigInt(decryptedValue)) / Math.pow(10, decimals);
         } else {
-          ethValue = 0;
+          tokenValue = 0;
         }
-        
+
         // Use adaptive precision: show more decimal places for small amounts
         let formattedValue: string;
-        if (ethValue >= 1) {
-          formattedValue = ethValue.toFixed(4);
-        } else if (ethValue >= 0.01) {
-          formattedValue = ethValue.toFixed(6);
-        } else if (ethValue >= 0.001) {
-          formattedValue = ethValue.toFixed(7);
-        } else if (ethValue >= 0.0001) {
-          formattedValue = ethValue.toFixed(8);
-        } else if (ethValue > 0) {
-          formattedValue = ethValue.toFixed(10);
+        if (tokenValue >= 1) {
+          formattedValue = tokenValue.toFixed(4);
+        } else if (tokenValue >= 0.01) {
+          formattedValue = tokenValue.toFixed(6);
+        } else if (tokenValue >= 0.001) {
+          formattedValue = tokenValue.toFixed(7);
+        } else if (tokenValue >= 0.0001) {
+          formattedValue = tokenValue.toFixed(8);
+        } else if (tokenValue > 0) {
+          formattedValue = tokenValue.toFixed(10);
         } else {
           formattedValue = '0.0000000000';
         }
-        
-        setSuppliedBalance(`${formattedValue} ETH`);
-        setHasSupplied(ethValue > 0);
+
+        setSuppliedBalance(`${formattedValue} ${symbol}`);
+        setHasSupplied(tokenValue > 0);
         setIsDecrypting(false);
         
     // Supplied balance decrypted successfully

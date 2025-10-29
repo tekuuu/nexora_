@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
-import { createPublicClient, http, parseEther } from 'viem';
+import { createPublicClient, http, parseEther, parseUnits } from 'viem';
 import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
 import {
   Box,
   TextField,
@@ -130,8 +131,8 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
   
   // Get cWETH balance and decryption info using generic hook
   const { formattedBalance: cWETHBalance, hasConfidentialToken: hasCWETH, isDecrypted } = useConfidentialTokenBalance(
-    { address: '0x3cca53c1f9983a0F2eaa6017Dab61113731E69CD', symbol: 'WETH', decimals: 18 },
-    masterSignature, 
+    { address: CONTRACTS.CONFIDENTIAL_WETH, symbol: 'WETH', decimals: 6 },
+    masterSignature,
     getMasterSignature
   );
 
@@ -244,7 +245,8 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
         // Import FHE utilities
         const { encryptAndRegister } = await import('../utils/fhe');
         
-        const amountWei = parseEther(amount);
+  // Confidential tokens use 6 internal decimals; encrypt using 6 decimals for unwrap
+  const amountWei = parseUnits(amount, 6);
         console.log('🔐 Encrypting amount for unwrap:', amountWei.toString());
         
         // Encrypt amount for unwrap step

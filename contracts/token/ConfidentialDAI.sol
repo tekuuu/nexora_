@@ -70,18 +70,5 @@ contract ConfidentialDAI is ConfidentialFungibleToken, Ownable, SepoliaConfig, R
         return 1;
     }
 
-    /// @notice Override decimals to match DAI (18 decimals)
-    /// @dev OpenZeppelin's ConfidentialFungibleToken defaults to 6, but DAI uses 18
-    function decimals() public pure override returns (uint8) {
-        return 18;
-    }
-
-    /// @notice Get token metadata
-    /// @return name The token name
-    /// @return symbol The token symbol
-    /// @return decimals The token decimals (18, same as DAI)
-    function getTokenInfo() external pure returns (string memory name, string memory symbol, uint8 decimals) {
-        return ("Confidential DAI", "cDAI", 18);
-    }
 }
 

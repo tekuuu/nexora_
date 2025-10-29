@@ -27,7 +27,7 @@ export const TOKEN_METADATA: Record<string, TokenMetadata> = {
   [CONTRACTS.CONFIDENTIAL_WETH]: {
     symbol: 'cWETH',
     name: 'Confidential Wrapped Ether',
-    decimals: 18,
+    decimals: 6,
     icon: '/assets/icons/weth.svg',
     color: '#627EEA',
     underlying: CONTRACTS.WETH,
@@ -49,7 +49,7 @@ export const TOKEN_METADATA: Record<string, TokenMetadata> = {
   [CONTRACTS.CONFIDENTIAL_DAI]: {
     symbol: 'cDAI',
     name: 'Confidential DAI',
-    decimals: 18,
+    decimals: 6,
     icon: '/assets/icons/dai.svg',
     color: '#F5AC37',
     underlying: CONTRACTS.DAI,

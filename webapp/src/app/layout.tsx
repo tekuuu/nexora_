@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import ConsoleFilter from '../components/ConsoleFilter';
 import ClientThemeProvider from '../components/ClientThemeProvider';
+import ThemeProvider from '../contexts/ThemeContext';
 import EmotionRegistry from '../lib/emotionRegistry';
 import Providers from '../components/Providers';
 
@@ -27,12 +28,14 @@ export default function RootLayout({
         letterSpacing: '-0.01em'
       }}>
         <EmotionRegistry>
-          <ClientThemeProvider>
-            <Providers>
-              <ConsoleFilter />
-              {children}
-            </Providers>
-          </ClientThemeProvider>
+          <ThemeProvider>
+            <ClientThemeProvider>
+              <Providers>
+                <ConsoleFilter />
+                {children}
+              </Providers>
+            </ClientThemeProvider>
+          </ThemeProvider>
         </EmotionRegistry>
       </body>
     </html>

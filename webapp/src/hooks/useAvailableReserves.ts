@@ -4,6 +4,7 @@
  */
 
 import { useReadContracts } from 'wagmi';
+import { useRef, useEffect } from 'react';
 import { CONTRACTS } from '../config/contracts';
 import { TOKEN_METADATA, getTokenMetadata, getAllKnownTokens, TokenMetadata } from '../config/tokenMetadata';
 
@@ -86,6 +87,7 @@ export function useAvailableReserves(): UseAvailableReservesReturn {
       staleTime: 30000, // Cache for 30 seconds
       refetchOnMount: true, // Always fetch on mount
       refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnReconnect: true, // Refetch when network reconnects
     }
   });
 
@@ -103,10 +105,16 @@ export function useAvailableReserves(): UseAvailableReservesReturn {
       staleTime: 30000, // Cache for 30 seconds
       refetchOnMount: true, // Always fetch on mount
       refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnReconnect: true, // Refetch when network reconnects
     }
   });
 
   const isLoading = isLoadingReserves || isLoadingPrices;
+
+  // Preserve last successful non-empty asset snapshot to avoid transient empty UI on RPC hiccups
+  const lastAssetsRef = useRef<AvailableAsset[]>([]);
+  // Grace window to avoid flashing "No markets" on initial load or brief RPC hiccups
+  const initTimeRef = useRef<number>(Date.now());
 
   // Combine on-chain data with metadata
   const allAssets: AvailableAsset[] = knownTokenAddresses
@@ -116,6 +124,8 @@ export function useAvailableReserves(): UseAvailableReservesReturn {
       const priceResult = priceData?.[index];
       
       const reserve = reserveResult?.result as any;
+      // priceResult is returned from on-chain oracle as a fixed-point integer.
+      // The oracle uses 1e12 fixed-point scaling (see oracle contract), so normalize to human-readable USD here.
       const price = priceResult?.result as any;
 
       if (!metadata || !reserve) {
@@ -129,7 +139,8 @@ export function useAvailableReserves(): UseAvailableReservesReturn {
         borrowingEnabled: reserve.borrowingEnabled || false,
         isCollateral: reserve.isCollateral || false,
         isPaused: reserve.isPaused || false,
-        ltv: reserve.collateralFactor ? Number(reserve.collateralFactor) / 1e12 * 100 : 0,
+        ltv: reserve.collateralFactor ? (Number(reserve.collateralFactor) / 1e12) * 100 : 0,
+        // Normalize oracle fixed-point price (1e12) to USD float for easier client-side math
         price: price ? Number(price) / 1e12 : 0,
         supplyCap: reserve.supplyCap ? (Number(reserve.supplyCap) / 1e12).toString() : '0',
         borrowCap: reserve.borrowCap ? (Number(reserve.borrowCap) / 1e12).toString() : '0',
@@ -137,17 +148,27 @@ export function useAvailableReserves(): UseAvailableReservesReturn {
     })
     .filter((asset): asset is AvailableAsset => asset !== null);
 
-  // Filter for different use cases
-  const supplyAssets = allAssets.filter(a => a.active && !a.isPaused);
-  const borrowAssets = allAssets.filter(a => a.active && a.borrowingEnabled && !a.isPaused);
-  const collateralAssets = allAssets.filter(a => a.active && a.isCollateral && !a.isPaused);
+  // Keep last non-empty snapshot to avoid "No markets available" glitches on occasional RPC failures
+  if (allAssets.length > 0) {
+    lastAssetsRef.current = allAssets;
+  }
+  const effectiveAllAssets = allAssets.length > 0 ? allAssets : lastAssetsRef.current;
+
+  // Filter for different use cases (use effective snapshot)
+  const supplyAssets = effectiveAllAssets.filter(a => a.active && !a.isPaused);
+  const borrowAssets = effectiveAllAssets.filter(a => a.active && a.borrowingEnabled && !a.isPaused);
+  const collateralAssets = effectiveAllAssets.filter(a => a.active && a.isCollateral && !a.isPaused);
+
+  // Effective loading: consider grace window to avoid flashing empty state on brief RPC hiccups
+  const withinGrace = Date.now() - initTimeRef.current < 3000;
+  const isEffectivelyLoading = isLoading || (effectiveAllAssets.length === 0 && withinGrace);
 
   return {
     supplyAssets,
     borrowAssets,
     collateralAssets,
-    allAssets,
-    isLoading,
+    allAssets: effectiveAllAssets,
+    isLoading: isEffectivelyLoading,
     refetch,
   };
 }

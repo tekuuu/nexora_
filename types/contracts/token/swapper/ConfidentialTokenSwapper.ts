@@ -359,13 +359,17 @@ export interface ConfidentialTokenSwapper extends BaseContract {
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
   swapConfidentialToERC20: TypedContractMethod<
-    [confToken: AddressLike, encryptedAmount: BytesLike, inputProof: BytesLike],
+    [
+      confToken: AddressLike,
+      encryptedAmountE6: BytesLike,
+      inputProof: BytesLike
+    ],
     [bigint],
     "nonpayable"
   >;
 
   swapERC20ToConfidential: TypedContractMethod<
-    [erc20Token: AddressLike, amount: BigNumberish, to: AddressLike],
+    [erc20Token: AddressLike, nativeAmount: BigNumberish, to: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -436,14 +440,18 @@ export interface ConfidentialTokenSwapper extends BaseContract {
   getFunction(
     nameOrSignature: "swapConfidentialToERC20"
   ): TypedContractMethod<
-    [confToken: AddressLike, encryptedAmount: BytesLike, inputProof: BytesLike],
+    [
+      confToken: AddressLike,
+      encryptedAmountE6: BytesLike,
+      inputProof: BytesLike
+    ],
     [bigint],
     "nonpayable"
   >;
   getFunction(
     nameOrSignature: "swapERC20ToConfidential"
   ): TypedContractMethod<
-    [erc20Token: AddressLike, amount: BigNumberish, to: AddressLike],
+    [erc20Token: AddressLike, nativeAmount: BigNumberish, to: AddressLike],
     [void],
     "nonpayable"
   >;

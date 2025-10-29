@@ -288,7 +288,7 @@ export function useWalletBalances(
 
       const result = await publicClient.call({
         to: token.address as `0x${string}`,
-        data: `0x70a08231000000000000000000000000${address.slice(2)}` as `0x${string}`
+        data: `0x92a576e6000000000000000000000000${address.slice(2)}` as `0x${string}` // getEncryptedBalance(address)
       });
 
       if (!result.data || result.data === '0x') {
@@ -323,8 +323,9 @@ export function useWalletBalances(
         decrypted = BigInt(0);
       }
 
-      const formatted = formatUnits(decrypted, token.decimals);
-      const displayValue = `${parseFloat(formatted).toFixed(token.decimals === 18 ? 4 : 2)} ${tokenSymbol}`;
+      const decimals = typeof token.decimals === 'number' ? token.decimals : 6;
+      const formatted = formatUnits(decrypted, decimals);
+      const displayValue = `${parseFloat(formatted).toFixed(decimals === 6 ? 2 : 4)} ${tokenSymbol}`;
 
       // Cache the decrypted value
       balanceCache[cacheKey] = {

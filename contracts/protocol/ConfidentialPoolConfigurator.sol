@@ -44,7 +44,11 @@ contract ConfidentialPoolConfigurator is IConfidentialPoolConfigurator, Ownable 
     ) external override onlyPoolAdmin {
         require(address(lendingPool) != address(0), "Lending pool not set");
         require(reserves[asset].underlyingAsset == address(0), "Reserve already initialized");
-        require(collateralFactor > 0 && collateralFactor <= Constants.PRECISION, "Invalid collateral factor");
+        if (isCollateral) {
+            require(collateralFactor > 0 && collateralFactor <= Constants.PERCENT_PRECISION, "Invalid collateral factor for collateral asset");
+        } else {
+            require(collateralFactor == 0, "Collateral factor must be 0 for non-collateral asset");
+        }
 
         // Store basic config in Configurator (without encrypted values)
         // The Pool will initialize encrypted values (totalSupplied, totalBorrowed, etc.)
@@ -86,7 +90,7 @@ contract ConfidentialPoolConfigurator is IConfidentialPoolConfigurator, Ownable 
     }
 
     function setCollateralFactor(address asset, uint64 factor) external override onlyRiskAdmin {
-        require(factor <= Constants.PRECISION, "Invalid collateral factor");
+        require(factor <= Constants.VALUE_PRECISION_FACTOR, "Invalid collateral factor");
         Types.ConfidentialReserve storage r = reserves[asset];
         r.collateralFactor = factor;
         _syncToLendingPool(asset);

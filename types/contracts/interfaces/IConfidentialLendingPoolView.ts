@@ -69,29 +69,14 @@ export declare namespace Types {
   };
 
   export type ConfidentialUserPositionStruct = {
-    totalBorrowPowerUSD: BytesLike;
-    totalDebtUSD: BytesLike;
-    totalSuppliedUSD: BytesLike;
-    collateralAssets: AddressLike[];
-    borrowedAssets: AddressLike[];
     initialized: boolean;
+    currentDebtAsset: AddressLike;
   };
 
   export type ConfidentialUserPositionStructOutput = [
-    totalBorrowPowerUSD: string,
-    totalDebtUSD: string,
-    totalSuppliedUSD: string,
-    collateralAssets: string[],
-    borrowedAssets: string[],
-    initialized: boolean
-  ] & {
-    totalBorrowPowerUSD: string;
-    totalDebtUSD: string;
-    totalSuppliedUSD: string;
-    collateralAssets: string[];
-    borrowedAssets: string[];
-    initialized: boolean;
-  };
+    initialized: boolean,
+    currentDebtAsset: string
+  ] & { initialized: boolean; currentDebtAsset: string };
 }
 
 export interface IConfidentialLendingPoolViewInterface extends Interface {

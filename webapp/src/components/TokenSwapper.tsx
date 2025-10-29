@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useState, useEffect, useMemo } from 'react';
+import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
 import { parseUnits, formatUnits } from 'viem';
 import { CONTRACTS, TOKEN_INFO } from '../config/contracts';
+import { useConfidentialTokenBalance } from '../hooks/useConfidentialTokenBalance';
+import { useMasterDecryption } from '../hooks/useMasterDecryption';
 import {
   Box,
   TextField,
@@ -146,6 +148,30 @@ const ERC20_ABI = [
   }
 ] as const;
 
+// ERC7984-like interface for confidential tokens: isOperator check + setOperator
+const ERC7984_ABI = [
+  {
+    "inputs": [
+      { "internalType": "address", "name": "holder", "type": "address" },
+      { "internalType": "address", "name": "operator", "type": "address" }
+    ],
+    "name": "isOperator",
+    "outputs": [ { "internalType": "bool", "name": "", "type": "bool" } ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "operator", "type": "address" },
+      { "internalType": "uint48", "name": "until", "type": "uint48" }
+    ],
+    "name": "setOperator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+] as const;
+
 interface TokenSwapperProps {
   onClose?: () => void;
   onTransactionSuccess?: () => Promise<void>;
@@ -164,7 +190,17 @@ interface TokenOption {
 export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwapperProps) {
   const { address, isConnected } = useAccount();
   const { writeContract, data: hash, isPending, error } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const publicClient = usePublicClient();
+
+  // Separate swap transaction tracking from operator-approval tracking
+  const [swapHash, setSwapHash] = useState<string | undefined>(undefined);
+  const [swapInFlight, setSwapInFlight] = useState(false);
+
+  // Watch swap tx receipt
+  const {
+    isLoading: isSwapConfirming,
+    isSuccess: isSwapSuccess,
+  } = useWaitForTransactionReceipt({ hash: swapHash });
 
   const [fheInitialized, setFheInitialized] = useState(false);
   const [fheError, setFheError] = useState<string | null>(null);
@@ -176,9 +212,23 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
   const [isValidAmount, setIsValidAmount] = useState(false);
   const [needsApproval, setNeedsApproval] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<string>('0');
+  const [customError, setCustomError] = useState<string | null>(null);
+
+  // Operator approval / two-phase flow state
+  const [operatorApprovalHash, setOperatorApprovalHash] = useState<string | undefined>(undefined);
+  const [isCheckingOperatorStatus, setIsCheckingOperatorStatus] = useState(false);
+  const [operatorApprovalNeeded, setOperatorApprovalNeeded] = useState(false);
+  const [operatorApprovalCompleted, setOperatorApprovalCompleted] = useState(false);
+
+  // Watch operator approval transaction separately
+  const {
+    isLoading: isOperatorApproving,
+    isSuccess: isOperatorApproved,
+    error: operatorApprovalTxError,
+  } = useWaitForTransactionReceipt({ hash: operatorApprovalHash });
 
   // Available tokens
-  const availableTokens: TokenOption[] = [
+  const availableTokens: TokenOption[] = useMemo(() => [
     {
       address: CONTRACTS.WETH,
       symbol: 'WETH',
@@ -196,8 +246,17 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       confidentialSymbol: 'cUSDC',
       confidentialName: 'Confidential USD Coin',
       isDeployed: String(CONTRACTS.CONFIDENTIAL_USDC) !== '0x0000000000000000000000000000000000000000'
+    },
+    {
+      address: CONTRACTS.DAI,
+      symbol: 'DAI',
+      name: 'Dai Stablecoin',
+      decimals: 18,
+      confidentialSymbol: 'cDAI',
+      confidentialName: 'Confidential DAI',
+      isDeployed: String(CONTRACTS.CONFIDENTIAL_DAI) !== '0x0000000000000000000000000000000000000000'
     }
-  ];
+  ], []);
 
   // Get balance for selected token
   const { data: balance } = useBalance({
@@ -267,19 +326,56 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       setBalanceWarning(null);
       setNeedsApproval(false);
     }
-  }, [amount, selectedToken, tokenBalance, swapDirection, fheInitialized, fheError]);
+  }, [amount, selectedToken, tokenBalance, swapDirection, fheInitialized, fheError, availableTokens]);
 
   useEffect(() => {
     if (isSuccess) {
       setShowSuccess(true);
       setAmount('');
+      setCustomError(null); // Clear any errors on success
       setTimeout(() => setShowSuccess(false), 5000);
-      
+
       if (onTransactionSuccess) {
         onTransactionSuccess();
       }
     }
   }, [isSuccess, onTransactionSuccess]);
+
+  // After operator approval tx confirms, mark approval as completed
+  useEffect(() => {
+    if (isOperatorApproved) {
+      setOperatorApprovalCompleted(true);
+      setOperatorApprovalHash(null);
+      setOperatorApprovalNeeded(false);
+      // Notify user that operator approval succeeded (they can click swap again)
+      setCustomError(null);
+    }
+
+    if (operatorApprovalTxError) {
+      console.error('Operator approval transaction failed:', operatorApprovalTxError);
+      setCustomError('Operator approval transaction failed. Please retry.');
+    }
+  }, [isOperatorApproved, operatorApprovalTxError]);
+
+  // Check if the confidential token already has the swapper set as operator
+  const checkOperatorApproval = async (confidentialTokenAddress: string, operatorAddress: string) => {
+    setIsCheckingOperatorStatus(true);
+    try {
+      const result = await (publicClient as any).readContract({
+        address: confidentialTokenAddress as `0x${string}`,
+        abi: ERC7984_ABI as any,
+        functionName: 'isOperator',
+        args: [address, operatorAddress],
+      } as any);
+
+      return Boolean(result);
+    } catch (err) {
+      console.error('Failed to check operator approval:', err);
+      return false;
+    } finally {
+      setIsCheckingOperatorStatus(false);
+    }
+  };
 
   const handleMaxAmount = () => {
     if (swapDirection === 'wrap' && tokenBalance) {
@@ -290,6 +386,8 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
 
   const handleSwap = async () => {
     if (!isValidAmount || !amount || !address) return;
+
+    setCustomError(null); // Clear any previous errors
 
     try {
       const tokenInfo = availableTokens.find(t => t.address === selectedToken);
@@ -304,6 +402,8 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
           console.log('Approval needed for', tokenInfo.symbol);
         }
 
+        // Compute amount in the token's native decimals for wrap operations.
+        // (Unwrap uses 6 internal decimals and is handled in the unwrap branch.)
         const amountWei = parseUnits(amount, tokenInfo.decimals);
         
         await writeContract({
@@ -314,39 +414,80 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
         });
       } else {
         console.log('📤 Starting unwrap process...');
-        
+
         if (!fheInitialized) {
           throw new Error('FHE not initialized. Please wait for initialization to complete.');
         }
-        
+
         if (fheError) {
           throw new Error(`FHE initialization failed: ${fheError}`);
         }
 
+        // Get confidential token address
+        const confidentialAddress = tokenInfo.address === CONTRACTS.WETH
+          ? CONTRACTS.CONFIDENTIAL_WETH
+          : tokenInfo.address === CONTRACTS.USDC
+          ? CONTRACTS.CONFIDENTIAL_USDC
+          : CONTRACTS.CONFIDENTIAL_DAI;
+
+        // Check operator approval status for the confidential token
+        let isApproved = false;
+        try {
+          isApproved = await checkOperatorApproval(confidentialAddress, CONTRACTS.TOKEN_SWAPPER as `0x${string}`);
+          setOperatorApprovalNeeded(!isApproved);
+        } catch (err) {
+          console.error('Error while checking operator approval:', err);
+          // proceed to attempt approval flow below
+        }
+
+        if (!isApproved) {
+          // Request operator approval via setOperator (24h expiry)
+          const until = BigInt(Math.floor(Date.now() / 1000) + 86400);
+          try {
+            const tx = await writeContract({
+              address: confidentialAddress as `0x${string}`,
+              abi: ERC7984_ABI,
+              functionName: 'setOperator',
+              args: [CONTRACTS.TOKEN_SWAPPER as `0x${string}`, until],
+            } as any);
+
+            // try to capture returned tx hash to watch separately
+            const txHash = (tx as any)?.hash ?? null;
+            if (txHash) {
+              setOperatorApprovalHash(txHash);
+            }
+
+            // Return early to wait for approval confirmation
+            setCustomError(null);
+            return;
+          } catch (err) {
+            console.error('Failed to send operator approval transaction:', err);
+            throw err;
+          }
+        }
+
+        console.log('✅ Operator already approved, proceeding with encrypt+swap');
+
         // Import FHE utilities
         const { encryptAndRegister } = await import('../utils/fhe');
-        
-        const amountWei = parseUnits(amount, tokenInfo.decimals);
-        console.log('🔐 Encrypting amount for unwrap:', amountWei.toString());
-        
-        // Get confidential token address
-        const confidentialAddress = tokenInfo.address === CONTRACTS.WETH 
-          ? CONTRACTS.CONFIDENTIAL_WETH 
-          : CONTRACTS.CONFIDENTIAL_USDC;
-        
+
+        // Confidential tokens use 6 internal decimals for encrypted amounts.
+        const amountWei = parseUnits(amount, 6);
+        console.log('🔐 Encrypting amount for unwrap (6 decimals):', amountWei.toString());
+
         // Encrypt amount for unwrap
         const encryptedAmount = await encryptAndRegister(
           confidentialAddress,
           address,
           amountWei
         );
-        
+
         if (!encryptedAmount || !encryptedAmount.handles?.length || !encryptedAmount.inputProof) {
           throw new Error('Failed to encrypt amount for unwrap. Please try again.');
         }
-        
+
         console.log('📝 Calling unwrap with encrypted data...');
-        
+
         await writeContract({
           address: CONTRACTS.TOKEN_SWAPPER as `0x${string}`,
           abi: SWAPPER_ABI,
@@ -360,6 +501,20 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       }
     } catch (err) {
       console.error('❌ Swap failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      let friendlyMessage = 'Swap failed. Please try again.';
+
+      if (errorMessage.includes('circuit breaker is open')) {
+        friendlyMessage = 'Swap temporarily unavailable due to maintenance. Please try again later.';
+      } else if (errorMessage.includes('insufficient funds')) {
+        friendlyMessage = 'Insufficient balance to complete the swap.';
+      } else if (errorMessage.includes('user rejected')) {
+        friendlyMessage = 'Transaction was cancelled by the user.';
+      } else if (errorMessage.includes('network')) {
+        friendlyMessage = 'Network error. Please check your connection and try again.';
+      }
+
+      setCustomError(friendlyMessage);
     }
   };
 
@@ -372,6 +527,11 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       setSwapDirection(newDirection);
       setAmount('');
       setBalanceWarning(null);
+      setCustomError(null);
+      // Clear any operator approval state when changing direction
+      setOperatorApprovalHash(null);
+      setOperatorApprovalNeeded(false);
+      setOperatorApprovalCompleted(false);
     }
   };
 
@@ -379,6 +539,11 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
     setSelectedToken(tokenAddress);
     setAmount('');
     setBalanceWarning(null);
+    setCustomError(null);
+    // Clear operator approval state when switching tokens
+    setOperatorApprovalHash(null);
+    setOperatorApprovalNeeded(false);
+    setOperatorApprovalCompleted(false);
   };
 
   if (!isConnected) {
@@ -408,9 +573,9 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
         </Alert>
       )}
 
-      {error && (
+      {(error || customError) && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {swapDirection === 'wrap' ? 'Conversion' : 'Unwrapping'} failed: {error.message}
+          {customError || `${swapDirection === 'wrap' ? 'Conversion' : 'Unwrapping'} failed: ${error?.message}`}
         </Alert>
       )}
 
@@ -423,6 +588,25 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       {swapDirection === 'unwrap' && fheError && (
         <Alert severity="error" sx={{ mb: 2 }}>
           FHE initialization failed: {fheError}
+        </Alert>
+      )}
+
+      {/* Operator approval alerts for two-phase unwrap flow */}
+      {operatorApprovalNeeded && !operatorApprovalHash && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          This swap requires two transactions: (1) Approve the swapper as operator, (2) Execute the swap.
+        </Alert>
+      )}
+
+      {operatorApprovalHash && isOperatorApproving && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Waiting for operator approval confirmation...
+        </Alert>
+      )}
+
+      {operatorApprovalCompleted && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Operator approved! Click the button again to complete the swap.
         </Alert>
       )}
 
@@ -558,9 +742,9 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
             variant="contained"
             size="large"
             onClick={handleSwap}
-            disabled={!isValidAmount || isPending || isConfirming || !selectedTokenInfo?.isDeployed}
+            disabled={!isValidAmount || isPending || isConfirming || isOperatorApproving || !selectedTokenInfo?.isDeployed}
             startIcon={
-              isPending || isConfirming ? (
+              isOperatorApproving || isPending || isConfirming ? (
                 <CircularProgress size={20} />
               ) : (
                 <SwapHoriz />
@@ -568,10 +752,14 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
             }
             sx={{ py: 1.5 }}
           >
-            {isPending
+            {isOperatorApproving
+              ? 'Approving Operator...'
+              : isPending
               ? 'Confirming Transaction...'
               : isConfirming
               ? `${swapDirection === 'wrap' ? 'Converting' : 'Unwrapping'}...`
+              : operatorApprovalCompleted
+              ? 'Operator Approved - Click to Swap'
               : swapDirection === 'unwrap' && !fheInitialized
               ? 'Initializing FHE...'
               : swapDirection === 'unwrap' && fheError

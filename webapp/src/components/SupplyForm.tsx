@@ -188,7 +188,7 @@ export default function SupplyForm({
   const asset = selectedAsset || {
     address: CONTRACTS.CONFIDENTIAL_WETH,
     symbol: 'cWETH',
-    decimals: 18,
+    decimals: 6,
     name: 'Confidential Wrapped Ether',
     icon: '/assets/icons/weth.svg',
     color: '#627EEA',

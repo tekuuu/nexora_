@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAccount, useBalance, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useReadContract, useConfig } from 'wagmi';
+import isEqual from 'fast-deep-equal';
 import { ConnectKitButton } from 'connectkit';
 // Pool hooks - Updated to work with new Pool
 import { useSuppliedBalance } from '../hooks/useSuppliedBalance';
@@ -36,7 +37,9 @@ import {
   IconButton,
   Alert,
 } from '@mui/material';
-import { AccountBalanceWallet, TrendingUp, ContentCopy, ExpandMore, Close, SwapHoriz, Lock, LockOpen, Cached } from '@mui/icons-material';
+import { AccountBalanceWallet, ContentCopy, ExpandMore, Close, SwapHoriz, Lock, LockOpen, Cached, AccountBalance, Percent } from '@mui/icons-material';
+import { Tooltip } from '@mui/material';
+import useTransactionHistory from '../hooks/useTransactionHistory';
 import { useRouter } from 'next/navigation';
 import { isAdminWallet } from '../config/admin/adminConfig';
 import SupplyForm from './SupplyForm';
@@ -50,11 +53,20 @@ import TokenList from './TokenList';
 import DynamicAssetSelector from './DynamicAssetSelector';
 import WalletAssetBreakdown from './WalletAssetBreakdown';
 import styles from './SwapStyles.module.css';
+// MarketsTab import removed from Dashboard — Markets live in their own dedicated tab/page.
+import MarketsTab from './MarketsTab';
+import UserOverviewSection from './UserOverviewSection';
+import UserSuppliesSection from './UserSuppliesSection';
+import UserBorrowsSection from './UserBorrowsSection';
+import { useTheme } from '../contexts/ThemeContext';
 import { useBorrowedBalances } from '../hooks/useBorrowedBalances';
 import { useReserveTotals } from '../hooks/useReserveTotals';
 import { useSuppliedBalances } from '../hooks/useSuppliedBalances';
+import type { AvailableAsset } from '../hooks/useAvailableReserves';
+import useCollateralToggle from '../hooks/useCollateralToggle';
 import { encryptAndRegister } from '../utils/fhe';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { parseUnits } from 'viem';
 
 // Contract ABI for ConfidentialWETH wrap/unwrap functions
 const CWETH_ABI = [
@@ -327,6 +339,7 @@ export default function Dashboard() {
     refetchEncryptedShares
   } = useSuppliedBalance(
     CONTRACTS.CONFIDENTIAL_WETH, // Asset address
+    'cWETH', // Symbol
     masterSignature,
     getMasterSignature
   );
@@ -341,24 +354,139 @@ export default function Dashboard() {
   } = useBorrowedBalances(masterSignature, getMasterSignature);
   
   const {
-    totals: reserveTotals,
+    totals,
     isLoading: isLoadingTotals,
-    isDecrypting: isDecryptingTotals,
+    isDecrypting,
     decryptAllTotals,
     forceRefresh: forceRefreshReserveTotals
   } = useReserveTotals(masterSignature, getMasterSignature);
 
+  // Backwards-compatible alias used elsewhere in this file
+  const reserveTotals = totals;
+  const isDecryptingTotals = isDecrypting;
+
+  // Handlers to integrate with MarketsTab
+  const handleSupplyClick = (asset: AvailableAsset) => {
+    setSelectedAsset({
+      address: asset.address,
+      symbol: asset.symbol,
+      decimals: asset.decimals,
+      name: asset.name,
+      icon: asset.icon,
+      color: asset.color
+    });
+    setShowSupplyModal(true);
+  };
+
+  const handleBorrowClick = (asset: AvailableAsset) => {
+    setSelectedAsset({
+      address: asset.address,
+      symbol: asset.symbol,
+      decimals: asset.decimals,
+      ltv: asset.ltv,
+      price: asset.price
+    });
+    setShowBorrowModal(true);
+  };
+
+  const handleDecryptAllTotals = () => {
+    if (typeof decryptAllTotals === 'function') decryptAllTotals();
+  };
+
+  // Withdraw handler for supplies
+  const handleWithdrawClick = (asset: { address: string; symbol: string; decimals: number; name?: string; icon?: string; color?: string }) => {
+    setSelectedAsset({
+      address: asset.address,
+      symbol: asset.symbol,
+      decimals: asset.decimals,
+      name: asset.name,
+      icon: asset.icon,
+      color: asset.color,
+    });
+    setShowWithdrawModal(true);
+  };
+
+  const handleNavigateToMarkets = () => {
+    setActiveTab('markets');
+  };
+
+  // Repay handler for borrows
+  const handleRepayClick = (asset: { address: string; symbol: string; decimals: number; name?: string; icon?: string; color?: string; price?: number }) => {
+    // Ensure decimals is populated; if missing, try to derive from supplyAssets or borrowAssets
+    let decimals = (asset as any).decimals;
+    if (decimals === undefined || decimals === null) {
+      const byAddress = (supplyAssets || []).find(a => a.address?.toLowerCase() === asset.address?.toLowerCase())
+        || (borrowAssets || []).find(a => a.address?.toLowerCase() === asset.address?.toLowerCase());
+      if (byAddress && typeof byAddress.decimals === 'number') {
+        decimals = byAddress.decimals;
+      } else {
+        const bySymbol = (supplyAssets || []).find(a => a.symbol === asset.symbol)
+          || (borrowAssets || []).find(a => a.symbol === asset.symbol);
+        if (bySymbol && typeof bySymbol.decimals === 'number') decimals = bySymbol.decimals;
+      }
+    }
+
+    setSelectedAsset({
+      address: asset.address,
+      symbol: asset.symbol,
+      decimals: typeof decimals === 'number' ? decimals : 18,
+      name: asset.name,
+      icon: asset.icon,
+      color: asset.color,
+      price: asset.price,
+    });
+    setShowRepayModal(true);
+  };
+
+  // Helper: check if user has an active borrow for a given asset symbol
+  const hasActiveBorrowsForSymbol = useCallback((symbol: string) => {
+    if (!borrowedBalances) return false;
+    const entry = Object.values(borrowedBalances).find((b: any) => b && b.symbol === symbol);
+    if (!entry) return false;
+    try {
+      const raw = (entry as any).amount;
+      const asNumber = typeof raw === 'bigint' ? Number(raw) : Number(raw || 0);
+      return Boolean(!Number.isNaN(asNumber) && asNumber > 0);
+    } catch (e) {
+      return false;
+    }
+  }, [borrowedBalances]);
+
+  // Collateral toggle hook
+  const { toggleCollateral, isToggling: isCollateralToggling, error: collateralToggleError } = useCollateralToggle();
+
+  // Trigger used to refresh collateral flags when toggles complete
+  const [collateralRefreshTrigger, setCollateralRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const onToggled = () => setCollateralRefreshTrigger(c => c + 1);
+    window.addEventListener('collateralToggled', onToggled as EventListener);
+    return () => window.removeEventListener('collateralToggled', onToggled as EventListener);
+  }, []);
+
   // Supply positions count for tab badge
-  const { balances: suppliedBalancesMap } = useSuppliedBalances(masterSignature, getMasterSignature);
+  const { balances: suppliedBalancesMap, isLoading: isLoadingSupplied } = useSuppliedBalances(masterSignature, getMasterSignature);
   const supplyPositionsCount = useMemo(() =>
     Object.values(suppliedBalancesMap || {}).filter((b: any) => b && (b as any).hasSupplied).length
   , [suppliedBalancesMap]);
+
+  // Transaction history hook (for Total Transactions metric)
+  const { totalTransactions } = useTransactionHistory();
+
+  // Calculate active positions count for Portfolio Analytics
+  const activePositionsCount = useMemo(() => {
+    const activeSupplyCount = Object.values(suppliedBalancesMap || {}).filter((b: any) => b && (b as any).hasSupplied).length;
+    const activeBorrowCount = Object.values(borrowedBalances || {}).filter((b: any) => b && (b as any).hasBorrowed).length;
+    return activeSupplyCount + activeBorrowCount;
+  }, [suppliedBalancesMap, borrowedBalances]);
   
   // OLD: Share percentage not needed with Pool (direct positions)
   const sharePercentage = '0';
   const hasShares = false;
   const isDecryptingShares = false;
-  const refreshShares = () => {};
+  const refreshShares = useCallback(() => {
+    // Placeholder - no-op. Replace with real implementation if needed.
+  }, []);
 
   // ERC20 token balance hooks using built-in Wagmi
   const { data: wethBalance, refetch: refetchWETHBalance } = useReadContract({
@@ -410,7 +538,7 @@ export default function Dashboard() {
   });
   
   const cwethBalance = useConfidentialTokenBalance(
-    { address: CONTRACTS.CONFIDENTIAL_WETH, symbol: 'WETH', decimals: 18 },
+    { address: CONTRACTS.CONFIDENTIAL_WETH, symbol: 'WETH', decimals: 6 },
     masterSignature, 
     getMasterSignature
   );
@@ -420,13 +548,111 @@ export default function Dashboard() {
     getMasterSignature
   );
   const cdaiBalance = useConfidentialTokenBalance(
-    { address: CONTRACTS.CONFIDENTIAL_DAI, symbol: 'DAI', decimals: 18 },
+    { address: CONTRACTS.CONFIDENTIAL_DAI, symbol: 'DAI', decimals: 6 },
     masterSignature, 
     getMasterSignature
   );
 
   // Dynamic reserves - fetches all active reserves from on-chain
   const { supplyAssets, borrowAssets, collateralAssets, isLoading: isLoadingReserves } = useAvailableReserves();
+
+  // Per-asset user collateral status: populate a symbol -> boolean map using direct RPC reads.
+  // IMPORTANT: we must NOT call React hooks inside loops. Instead perform safe contract reads
+  // inside a useEffect and store the results in component state.
+  const [userCollateralEnabledBySymbol, setUserCollateralEnabledBySymbol] = useState<Record<string, boolean>>({});
+
+  // Refs to prevent concurrent fetchFlags calls, manage debounce timeout, and check dependency changes
+  const isFetchingRef = useRef(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prevDepsRef = useRef({ address, supplyAssets, config, collateralRefreshTrigger });
+
+  useEffect(() => {
+    const currentDeps = { address, supplyAssets, config, collateralRefreshTrigger };
+    if (isEqual(prevDepsRef.current, currentDeps)) {
+      return;
+    }
+    prevDepsRef.current = currentDeps;
+
+    let mounted = true;
+    const CONTRACTS = getSafeContractAddresses();
+    const POOL_ABI = [
+      {
+        "inputs": [
+          { "internalType": "address", "name": "", "type": "address" },
+          { "internalType": "address", "name": "", "type": "address" }
+        ],
+        "name": "userCollateralEnabled",
+        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ] as const;
+
+    const fetchFlags = async () => {
+      if (!mounted) return;
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+
+      if (!address || !supplyAssets || supplyAssets.length === 0) {
+        if (mounted) setUserCollateralEnabledBySymbol({});
+        isFetchingRef.current = false;
+        return;
+      }
+
+      if (!CONTRACTS || !CONTRACTS.POOL_ADDRESS) {
+        // No pool address available; default to empty map
+        if (mounted) setUserCollateralEnabledBySymbol({});
+        isFetchingRef.current = false;
+        return;
+      }
+
+      try {
+        const entries = await Promise.all(supplyAssets.map(async (asset) => {
+          try {
+            const res = await readContract(config, {
+              address: CONTRACTS.POOL_ADDRESS as `0x${string}`,
+              abi: POOL_ABI,
+              functionName: 'userCollateralEnabled',
+              args: [address as `0x${string}`, asset.address as `0x${string}`],
+            });
+            return [asset.symbol, Boolean(res)] as const;
+          } catch (err) {
+            // On error, default to false for safety
+            return [asset.symbol, false] as const;
+          }
+        }));
+
+        if (!mounted) {
+          isFetchingRef.current = false;
+          return;
+        }
+        const map: Record<string, boolean> = {};
+        entries.forEach(([sym, enabled]) => { map[sym] = enabled; });
+        setUserCollateralEnabledBySymbol(map);
+      } catch (err) {
+        console.error('Failed to fetch user collateral flags:', err);
+        if (mounted) setUserCollateralEnabledBySymbol({});
+      } finally {
+        isFetchingRef.current = false;
+      }
+    };
+
+    // Clear existing timeout if any
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      fetchFlags();
+    }, 5000); // 5 second debounce
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      mounted = false;
+    };
+  }, [address, supplyAssets, config, collateralRefreshTrigger]);
   
   // Prepare available assets for WalletAssetBreakdown component
   const availableWalletAssets = useMemo(() => {
@@ -438,16 +664,16 @@ export default function Dashboard() {
       icon: asset.icon,
       color: asset.color || '#627EEA',
     }));
-  }, [supplyAssets, isLoadingReserves]);
+  }, [supplyAssets]);
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'supply' | 'borrow' | 'portfolio'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'markets' | 'portfolio'>('dashboard');
   const [walletInfoAnchor, setWalletInfoAnchor] = useState<null | HTMLElement>(null);
   const [selectedNetwork, setSelectedNetwork] = useState('Sepolia');
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [useVerticalNav, setUseVerticalNav] = useState(false);
   
-  const navigationTabs: ('dashboard' | 'supply' | 'borrow' | 'portfolio')[] = ['dashboard', 'supply', 'borrow', 'portfolio'];
+  const navigationTabs: ('dashboard' | 'markets' | 'portfolio')[] = ['dashboard', 'markets', 'portfolio'];
   
   // Dynamic breakpoint detection
   useEffect(() => {
@@ -481,8 +707,7 @@ export default function Dashboard() {
   const [showBorrowModal, setShowBorrowModal] = useState(false);
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
-  const [supplySubTab, setSupplySubTab] = useState('supply'); // 'supply' or 'position'
-  const [borrowSubTab, setBorrowSubTab] = useState('borrow'); // 'borrow' or 'position'
+  
   const [portfolioSubTab, setPortfolioSubTab] = useState('overview'); // 'overview' or 'history'
   const [showNotificationBanner, setShowNotificationBanner] = useState(true);
   const [swapAmount, setSwapAmount] = useState('');
@@ -496,7 +721,8 @@ export default function Dashboard() {
   const [swapTransactionError, setSwapTransactionError] = useState<string | null>(null);
   const [swapUserCancelled, setSwapUserCancelled] = useState(false);
   const [swapSuccess, setSwapSuccess] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true); // true = night mode, false = day mode
+  // Move theme state to context (useTheme hook)
+  const { isDarkMode, toggleTheme } = useTheme();
   const [isSwapCompleted, setIsSwapCompleted] = useState(false); // Local state to override wagmi pending states
 
   // Swap functionality hooks
@@ -516,7 +742,9 @@ export default function Dashboard() {
   const canDecryptTVL = false;
   const decryptTVL = () => {};
   const lockTVLIndividual = () => {};
-  const refreshTVL = () => {};
+  const refreshTVL = useCallback(() => {
+    // Placeholder - no-op. Replace with real implementation if needed.
+  }, []);
 
   // Check if any decryption is in progress
   const isAnyDecrypting = isDecryptingSupplied || cwethBalance.isDecrypting || cusdcBalance.isDecrypting || isDecryptingShares || isMasterDecrypting || isDecryptingTVL;
@@ -543,7 +771,7 @@ export default function Dashboard() {
     initializeFHE();
   }, [isConnected, address]);
 
-  // Refresh all blockchain data
+  // Refresh all blockchain data - wrapped in useCallback to stabilize identity
   const refreshAllBalances = useCallback(async () => {
     console.log('🔄 Refreshing all blockchain data including TVL...');
     try {
@@ -562,7 +790,18 @@ export default function Dashboard() {
     } catch (error) {
       console.error('❌ Error refreshing blockchain data:', error);
     }
-  }, [refetchEncryptedShares, refetchWETHBalance, refetchUSDCBalance, refetchDAIBalance, cwethBalance.forceRefresh, cusdcBalance.forceRefresh, cdaiBalance.forceRefresh, refreshShares, refreshTVL, forceRefreshBorrowed, forceRefreshReserveTotals]);
+  }, [
+    refetchEncryptedShares,
+    refetchWETHBalance,
+    refetchUSDCBalance,
+    // include the stable function references for confidential balance refresh
+    cwethBalance,
+    cusdcBalance,
+    refreshShares,
+    refreshTVL,
+    forceRefreshBorrowed,
+    forceRefreshReserveTotals
+  ]);
 
   // NEW: Create transaction-specific callbacks (invalidation disabled for now)
   const handleSupplySuccess = useCallback(async () => {
@@ -795,6 +1034,20 @@ export default function Dashboard() {
 
   const handleDisconnect = () => {
     disconnect();
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        // Remove any wagmi-related cached keys to avoid stale connector state
+        const keys = Object.keys(localStorage || {});
+        for (const k of keys) {
+          if (k && k.startsWith('wagmi')) {
+            localStorage.removeItem(k);
+          }
+        }
+      }
+    } catch (e) {
+      // Non-fatal: continue with UI state cleanup even if localStorage access fails
+      console.warn('Failed to clear wagmi localStorage keys on disconnect', e);
+    }
     setWalletInfoAnchor(null);
   };
 
@@ -850,10 +1103,11 @@ export default function Dashboard() {
         CONTRACTS.CONFIDENTIAL_DAI;
       const swapperAddress = CONTRACTS.TOKEN_SWAPPER as `0x${string}`;
 
-      // Convert amount to proper decimals (WETH=18, USDC=6, DAI=18)
+      // Convert amounts for swap: native ERC20 decimals and confidential 6-decimals
       const decimals = tokenInfo.decimals;
-      const amountInWei = BigInt(Math.floor(parseFloat(swapAmount) * Math.pow(10, decimals)));
-
+      const amountNative = parseUnits(swapAmount, decimals); // ERC20 native decimals
+      const amountE6 = parseUnits(swapAmount, 6); // Confidential tokens use 6 decimals
+      
       if (isReversed) {
         // Confidential Token → ERC20 (unwrap)
         console.log('📤 Starting unwrap process...');
@@ -869,8 +1123,8 @@ export default function Dashboard() {
           throw new Error(`FHE initialization failed: ${fheError}`);
         }
         
-        // Encrypt amount for unwrap
-        console.log('🔐 Encrypting amount for unwrap:', amountInWei.toString());
+        // Encrypt amount for unwrap (6 decimals)
+        console.log('🔐 Encrypting amount for unwrap (6 decimals):', amountE6.toString());
         
         let encryptedAmount;
         let formattedEncryptedAmount: `0x${string}`;
@@ -880,7 +1134,7 @@ export default function Dashboard() {
           encryptedAmount = await encryptAndRegister(
             swapperAddress,
             address,
-            amountInWei
+            amountE6
           );
           
           if (!encryptedAmount || !encryptedAmount.handles?.length || !encryptedAmount.inputProof) {
@@ -984,12 +1238,16 @@ export default function Dashboard() {
             functionName: 'balanceOf',
             args: [swapperAddress as `0x${string}`],
           });
-          console.log('💰 Swapper ERC20 balance:', swapperBalance.toString());
-          console.log('💰 Required amount:', amountInWei.toString());
-          console.log('💰 Sufficient balance:', BigInt(swapperBalance.toString()) >= amountInWei);
+          // Convert 6-decimal amount to native ERC20 decimals for balance check
+          const requiredNative = decimals >= 6
+            ? amountE6 * (10n ** BigInt(decimals - 6))
+            : amountE6 / (10n ** BigInt(6 - decimals));
+          console.log('💰 Swapper ERC20 balance (native):', swapperBalance.toString());
+          console.log('💰 Required amount (native):', requiredNative.toString());
+          console.log('💰 Sufficient balance:', BigInt(swapperBalance.toString()) >= requiredNative);
           
-          if (BigInt(swapperBalance.toString()) < amountInWei) {
-            throw new Error(`Insufficient swapper balance: ${swapperBalance.toString()} < ${amountInWei.toString()}`);
+          if (BigInt(swapperBalance.toString()) < requiredNative) {
+            throw new Error(`Insufficient swapper balance: ${swapperBalance.toString()} < ${requiredNative.toString()}`);
           }
         } catch (balanceError) {
           console.warn('⚠️ Could not check swapper balance:', balanceError);
@@ -1005,7 +1263,7 @@ export default function Dashboard() {
           confidentialAddress,
           encryptedAmount: formattedEncryptedAmount,
           inputProof: formattedInputProof,
-          amountInWei: amountInWei.toString(),
+          amountE6: amountE6.toString(),
           userAddress: address
         });
         
@@ -1113,14 +1371,14 @@ export default function Dashboard() {
           functionName: 'allowance',
           args: [address, swapperAddress],
         });
-
-        if (allowance < amountInWei) {
+        
+        if (allowance < amountNative) {
           console.log('Approving ERC20 tokens...');
           const approveHash = await writeContractAsync({
             address: erc20Address as `0x${string}`,
             abi: ERC20_ABI,
             functionName: 'approve',
-            args: [swapperAddress, amountInWei],
+            args: [swapperAddress, amountNative],
           });
           console.log('Approval transaction:', approveHash);
           await waitForTransactionReceipt(config, { hash: approveHash });
@@ -1132,7 +1390,7 @@ export default function Dashboard() {
           address: swapperAddress as `0x${string}`,
           abi: TOKEN_SWAPPER_ABI,
           functionName: 'swapERC20ToConfidential',
-          args: [erc20Address, amountInWei, address],
+          args: [erc20Address, amountNative, address],
         });
         console.log('✅ Wrap transaction submitted successfully:', result);
         
@@ -1411,10 +1669,10 @@ export default function Dashboard() {
 
       <AppBar position="static" sx={{ 
         background: isDarkMode 
-          ? 'linear-gradient(135deg, #d7e3f0ff 0%, #191919 0%)'
+          ? 'linear-gradient(135deg, #191919 0%, #191919 0%)'
           : 'linear-gradient(135deg, #ffffff3a 0%, #e6ded4de 0%)',
         boxShadow: isDarkMode 
-          ? '0 2px 8px rgba(9, 76, 202, 0.1)'
+          ? '0 2px 8px rgba(15, 15, 15, 0.98)'
           : '0 2px 8px rgba(15, 15, 15, 0.98)',
         color: isDarkMode ? 'white' : '#000000'
       }}>
@@ -1581,7 +1839,7 @@ export default function Dashboard() {
           }}>
             <Tabs
               value={activeTab}
-              onChange={(_: React.SyntheticEvent, newValue: any) => setActiveTab(newValue as 'dashboard' | 'supply' | 'borrow' | 'portfolio')}
+              onChange={(_: React.SyntheticEvent, newValue: any) => setActiveTab(newValue as 'dashboard' | 'markets' | 'portfolio')}
               textColor="inherit"
               indicatorColor="secondary"
               sx={{
@@ -1600,14 +1858,13 @@ export default function Dashboard() {
                   }
                 },
                 '& .MuiTabs-indicator': {
-                  backgroundColor: isDarkMode ? 'white' : '#2c3e50',
+                  backgroundColor: isDarkMode ? 'white' : '#000000',
                   height: '2px'
                 }
               }}
             >
               <Tab label="Dashboard" value="dashboard" />
-              <Tab label="Supply" value="supply" />
-              <Tab label="Borrow" value="borrow" />
+              <Tab label="Markets" value="markets" />
               <Tab label="Portfolio" value="portfolio" />
             </Tabs>
           </Box>
@@ -1629,7 +1886,12 @@ export default function Dashboard() {
                     endIcon={<ExpandMore />}
                     onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
                     sx={{
-                      borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(44, 62, 80, 0.3)',
+                      background: isDarkMode 
+                      ? 'linear-gradient(135deg, #34495e 0%, #14171aff  0%)'
+                      : 'linear-gradient(135deg, #5e6061ff 0%, #e6ded4de  0%)',
+                      border: isDarkMode 
+                          ? '1px solid rgba(255, 255, 255, 0.3)'
+                          : '1px solid rgba(3, 24, 37, 0.94)',
                       color: isDarkMode ? 'white' : '#000000',borderRadius: '0px',
                       minWidth: { xs: '40px', sm: '120px', md: 'auto' },
                       width: { xs: '40px', sm: '120px', md: 'auto' },height: '34px',
@@ -1673,7 +1935,7 @@ export default function Dashboard() {
                       maxWidth: { xs: '180px', sm: '200px' },
                       maxHeight: '150px',
                       background: isDarkMode 
-                        ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
+                        ? 'linear-gradient(135deg, #2c3e50 0%,#1f2325ff 0%)'
                         : 'linear-gradient(135deg, #e6ded4de  0%, #e6ded4de 0%)',
                       border: isDarkMode 
                         ? '1px solid rgba(255, 255, 255, 0.1)'
@@ -1717,7 +1979,7 @@ export default function Dashboard() {
                             fontSize: '0.75rem',
                             fontWeight: network.name === selectedNetwork ? '600' : '400',
                             background: network.name === selectedNetwork 
-                              ? (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(44, 62, 80, 0.1)')
+                              ? (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)')
                               : 'transparent',
                             '&:hover': network.functional ? {
                               background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(44, 62, 80, 0.05)'
@@ -1725,7 +1987,7 @@ export default function Dashboard() {
                             borderBottom: '1px solid',
                             borderBottomColor: isDarkMode 
                               ? 'rgba(255, 255, 255, 0.05)'
-                              : 'rgba(44, 62, 80, 0.05)'
+                              : 'rgba(0, 0, 0, 0.05)'
                           }}
                         >
                           <img 
@@ -1774,28 +2036,21 @@ export default function Dashboard() {
                         height: '34px',
                         background: isDarkMode 
                           ? 'linear-gradient(135deg, #34495e 0%, #14171aff  0%)'
-                          : 'linear-gradient(135deg, #3498db 0%, #e6ded4de    0%)',
+                          : 'linear-gradient(135deg, #5e6061ff 0%, #e6ded4de  0%)',
                         color: isAllDecrypted 
                           ? (isDarkMode ? '#f01d05ff' : '#c0392b') // Red for unlock (can lock)
                           : (isDarkMode ? '#11d817ff' : '#2ecc71'), // Green for lock (can unlock)
                         border: isDarkMode 
                           ? '1px solid rgba(255, 255, 255, 0.3)'
-                          : '1px solid rgba(52, 152, 219, 0.2)',
+                          : '1px solid rgba(3, 24, 37, 0.94)',
                         borderRadius: '0px',
                         boxShadow: isDarkMode 
                           ? '0 4px 14px 0 rgba(13, 13, 14, 0.95)'
                           : '0 4px 14px 0 rgba(52, 152, 219, 0.3)',
                         '&:hover': {
                           background: isDarkMode 
-                            ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
-                            : 'linear-gradient(135deg, #2980b9 0%, #3498db 100%)',
-                          boxShadow: isDarkMode 
-                            ? '0 6px 20px 0 rgba(52, 73, 94, 0.4)'
-                            : '0 6px 20px 0 rgba(52, 152, 219, 0.4)',
-                      
-                          color: isAllDecrypted 
-                            ? (isDarkMode ? '#c0392b' : '#e74c3c')
-                            : (isDarkMode ? '#11d817ff' : '#27ae60')
+                            ? 'rgba(255, 255, 255, 0.15)'
+                            : 'rgba(44, 62, 80, 0.15)'
                         },
                         '&:disabled': {
                           opacity: 0.6,
@@ -1839,28 +2094,24 @@ export default function Dashboard() {
                   sx={{
                     background: isDarkMode 
                       ? 'linear-gradient(135deg, #34495e 0%, #14171aff 0%)'
-                      : 'linear-gradient(135deg, #3498db 0%, #e6ded4de 0%)',
+                      : 'linear-gradient(135deg, #5e6061ff 0%, #e6ded4de  0%)',
                     color: isDarkMode ? 'white' : '#000000',
-                    fontWeight: '600',
+                    
                     px: { xs: 2, sm: 3 },height: '34px', borderRadius: '0px',
                     textTransform: 'none',
                     fontSize: { xs: '0.7rem', sm: '0.75rem' },
                     boxShadow: isDarkMode 
-                      ? '0 4px 14px 0 rgba(5, 6, 7, 0.96)'
-                      : '0 4px 14px 0 rgba(52, 152, 219, 0.3)',
+                        ? '0 4px 14px 0 rgba(5, 6, 7, 0.96)'
+                        : '0 4px 14px 0 rgba(52, 152, 219, 0.3)',
                     border: isDarkMode 
-                      ? '1px solid rgba(255, 255, 255, 0.3)'
-                      : '1px solid rgba(52, 152, 219, 0.2)',
+                        ? '1px solid rgba(255, 255, 255, 0.3)'
+                        : '1px solid rgba(3, 24, 37, 0.94)',
                     '&:hover': {
                       background: isDarkMode 
-                        ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
-                        : 'linear-gradient(135deg, #2980b9 0%, #3498db 100%)',
-                      boxShadow: isDarkMode 
-                        ? '0 6px 20px 0 rgba(52, 73, 94, 0.4)'
-                        : '0 6px 20px 0 rgba(52, 152, 219, 0.4)',
-                 
+                        ? 'rgba(255, 255, 255, 0.15)'
+                        : 'rgba(44, 62, 80, 0.15)'
                     },
-                    transition: 'all 0.3s ease'
+                    
                   }}
                 >
                   Swap
@@ -1880,8 +2131,8 @@ export default function Dashboard() {
                       : '0 4px 14px 0 rgba(52, 152, 219, 0.3)',
                   border: isDarkMode 
                       ? '1px solid rgba(255, 255, 255, 0.3)'
-                      : '1px solid rgba(52, 152, 219, 0.2)',
-                  borderRadius: '0px', // Match network selector border radius
+                      : '1px solid rgba(3, 24, 37, 0.94)',
+                  borderRadius: '0px',
                   px: { xs: 1, sm: 2 },
                   py: { xs: 0.5, sm: 1 },
                   cursor: 'pointer',
@@ -1964,7 +2215,7 @@ export default function Dashboard() {
         px: { xs: 2, sm: 3, md: 4 },
         background: isDarkMode 
           ? 'transparent'
-          : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+          : 'linear-gradient(135deg, #F9FAFB 0%, #F9FAFB 0%)',
         minHeight: '100vh', // Use full viewport height
         display: 'flex',
         flexDirection: 'column'
@@ -1981,22 +2232,33 @@ export default function Dashboard() {
           {activeTab === 'dashboard' && (
                   <Box>
             {/* Portfolio Overview Section */}
-            <Card sx={{ 
-              mb: { xs: 2, sm: 3 }, 
-              background: isDarkMode 
+            <Card sx={{
+              mb: { xs: 2, sm: 3 },
+              background: isDarkMode
                 ? 'linear-gradient(135deg, #34495e 0%,  #1f2325ff 0%)'
                 : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 100%)',
-              color: isDarkMode ? 'white' : '#2c3e50',
+              color: isDarkMode ? 'white' : '#000000',
               borderRadius: '0px',
               overflow: 'hidden',
-              border: isDarkMode 
+              border: isDarkMode
                 ? '1px solid rgba(255, 255, 255, 0.1)'
                 : '1px solid rgba(44, 62, 80, 0.1)',
-              boxShadow: isDarkMode 
+              boxShadow: isDarkMode
                 ? '0 4px 20px rgba(0, 0, 0, 0.3)'
                 : '0 4px 20px rgba(0, 0, 0, 0.1)'
             }}>
               <CardContent sx={{ p: { xs: 2, sm: 4 } }}>
+                {/* User overview section (Net Worth, Total Supply, Total Borrow, Health Factor) */}
+                <UserOverviewSection
+                  suppliedBalances={suppliedBalancesMap}
+                  borrowedBalances={borrowedBalances}
+                  assets={supplyAssets}
+                  isLoadingSupplied={isLoadingSupplied}
+                  isLoadingBorrowed={isLoadingBorrowed}
+                  isDarkMode={isDarkMode}
+                  userCollateralEnabledBySymbol={userCollateralEnabledBySymbol}
+                />
+
                 <Box sx={{ 
                   display: 'flex', 
                   justifyContent: 'space-between', 
@@ -2014,13 +2276,70 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Markets (Dynamic) */}
+            {/* Portfolio Positions - Combined Supplies and Borrows */}
             <Card sx={{
               mb: 2,
               background: isDarkMode
-                ? 'linear-gradient(135deg, #011931ff  0%, #1f2325ff 0%)'
-                : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 100%)',
-              color: isDarkMode ? 'white' : '#2c3e50',
+                ? 'linear-gradient(135deg, #011931ff 0%, #1f2325ff 0%)'
+                : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 0%)',
+              color: isDarkMode ? 'white' : '#000000',
+              borderRadius: '0px',
+              border: isDarkMode
+                ? '1px solid rgba(255, 255, 255, 0.04)'
+                : '1px solid rgba(44, 62, 80, 0.08)',
+              boxShadow: isDarkMode
+                ? '0 4px 20px rgba(0, 0, 0, 0.3)'
+                : '0 4px 20px rgba(0, 0, 0, 0.04)'
+            }}>
+              <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: isDarkMode ? 'white' : '#000000' }}>Your Portfolio Positions</Typography>
+
+                {/* Supplies Section */}
+                <Box sx={{ mb: 4 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: isDarkMode ? 'white' : '#000000' }}>Your Supplies</Typography>
+                  <UserSuppliesSection
+                    suppliedBalances={suppliedBalancesMap}
+                    assets={supplyAssets}
+                    userCollateralEnabled={userCollateralEnabledBySymbol}
+                    onWithdrawClick={handleWithdrawClick}
+                    onCollateralToggle={(asset, enabled) => toggleCollateral(asset, enabled)}
+                    hasActiveBorrowsForSymbol={hasActiveBorrowsForSymbol}
+                    isLoadingSupplied={isLoadingSupplied}
+                    isDarkMode={isDarkMode}
+                    onNavigateToMarkets={handleNavigateToMarkets}
+                  />
+                </Box>
+
+                {/* Borrows Section */}
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: isDarkMode ? 'white' : '#000000' }}>Your Borrows</Typography>
+                  <UserBorrowsSection
+                    borrowedBalances={borrowedBalances}
+                    suppliedBalances={suppliedBalancesMap}
+                    assets={supplyAssets}
+                    userCollateralEnabled={userCollateralEnabledBySymbol}
+                    onRepayClick={handleRepayClick}
+                    isLoadingBorrowed={isLoadingBorrowed}
+                    isDarkMode={isDarkMode}
+                    onNavigateToMarkets={handleNavigateToMarkets}
+                  />
+                </Box>
+              </CardContent>
+            </Card>
+
+            {/* Markets removed from Dashboard to keep it user-centric (moved to dedicated Markets tab) */}
+          </Box>
+        )}
+
+        {/* Markets Tab */}
+        {activeTab === 'markets' && (
+          <Box>
+            <Card sx={{
+              mb: 2,
+              background: isDarkMode
+                ? 'linear-gradient(135deg, #011931ff 0%, #1f2325ff 0%)'
+                : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 0%)',
+              color: isDarkMode ? 'white' : '#000000',
               borderRadius: '0px',
               border: isDarkMode
                 ? '1px solid rgba(255, 255, 255, 0.1)'
@@ -2030,1030 +2349,22 @@ export default function Dashboard() {
                 : '0 4px 20px rgba(0, 0, 0, 0.1)'
             }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-                <Typography variant="h6" sx={{ fontWeight: '600', mb: 2, fontFamily: 'sans-serif' }}>
-                  Markets
-                </Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => decryptAllTotals()}
-                    disabled={!masterSignature || isLoadingTotals || isDecryptingTotals}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    {(isLoadingTotals || isDecryptingTotals) ? 'Decrypting...' : 'Decrypt totals'}
-                  </Button>
-                </Box>
-
-                {/* Responsive Markets Display */}
-                {supplyAssets && supplyAssets.length > 0 ? (
-                  <>
-                    {/* Desktop Table View - Hidden on small screens */}
-                    <Box sx={{
-                      display: { xs: 'none', md: 'block' },
-                      width: '100%',
-                      overflowX: 'auto',
-                      m: 0,
-                      p: 0,
-                      '& table': {
-                        width: '100%',
-                        minWidth: '100%',
-                        borderCollapse: 'collapse',
-                        border: isDarkMode
-                          ? '1px solid rgba(255, 255, 255, 0.1)'
-                          : '1px solid rgba(44, 62, 80, 0.1)',
-                        borderRadius: '0px',
-                        overflow: 'hidden',
-                        margin: 0
-                      },
-                      '& th, & td': {
-                        padding: '12px 16px',
-                        textAlign: 'left',
-                        borderBottom: isDarkMode
-                          ? '1px solid rgba(255, 255, 255, 0.1)'
-                          : '1px solid rgba(44, 62, 80, 0.1)'
-                      },
-                      '& th': {
-                        background: isDarkMode
-                          ? 'rgba(255, 255, 255, 0.08)'
-                          : 'rgba(44, 62, 80, 0.08)',
-                        fontWeight: '600',
-                        fontSize: '0.875rem',
-                        color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)'
-                      },
-                      '& tbody tr:hover': {
-                        background: isDarkMode
-                          ? 'rgba(255, 255, 255, 0.05)'
-                          : 'rgba(44, 62, 80, 0.05)'
-                      }
-                    }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th style={{ width: '200px' }}>Asset</th>
-                            <th style={{ width: '120px', textAlign: 'center' }}>Total Supplied</th>
-                            <th style={{ width: '100px', textAlign: 'center' }}>Supply APY</th>
-                            <th style={{ width: '120px', textAlign: 'center' }}>Total Borrowed</th>
-                            <th style={{ width: '100px', textAlign: 'center' }}>Borrow APY</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(supplyAssets || []).map((asset) => (
-                            <tr key={`market-${asset.address}`}>
-                              {/* Asset column */}
-                              <td>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                  <Box sx={{
-                                    width: 36, height: 36, borderRadius: '50%',
-                                    background: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(44, 62, 80, 0.1)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                  }}>
-                                    {(() => {
-                                      const meta = Object.values(TOKEN_METADATA).find(m => m.symbol === asset.symbol);
-                                      const icon = meta?.icon || '/assets/icons/ethereum.svg';
-                                      const alt = meta?.name || asset.symbol;
-                                      return <img src={icon} alt={alt} style={{ width: 20, height: 20 }} />;
-                                    })()}
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                      {asset.symbol}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                                      {asset.name}
-                                    </Typography>
-                                  </Box>
-                                </Box>
-                              </td>
-
-                              {/* Total Supplied */}
-                              <td style={{ textAlign: 'center' }}>
-                                <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                                  {reserveTotals[asset.symbol]?.isDecrypted ? reserveTotals[asset.symbol]?.formattedTotalSupplied : '••••••••'}
-                                </Typography>
-                              </td>
-
-                              {/* Supply APY */}
-                              <td style={{ textAlign: 'center' }}>
-                                <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                                  —
-                                </Typography>
-                              </td>
-
-                              {/* Total Borrowed */}
-                              <td style={{ textAlign: 'center' }}>
-                                <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                                  {reserveTotals[asset.symbol]?.isDecrypted ? reserveTotals[asset.symbol]?.formattedTotalBorrowed : '••••••••'}
-                                </Typography>
-                              </td>
-
-                              {/* Borrow APY */}
-                              <td style={{ textAlign: 'center' }}>
-                                <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                                  —
-                                </Typography>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </Box>
-
-                    {/* Mobile Card View - Hidden on medium screens and up */}
-                    <Box sx={{
-                      display: { xs: 'flex', sm: 'flex', md: 'none' },
-                      flexDirection: 'column',
-                      gap: 2
-                    }}>
-                      {(supplyAssets || []).map((asset) => (
-                        <Card
-                          key={`market-mobile-${asset.address}`}
-                          sx={{
-                            borderRadius: '0px',
-                            background: isDarkMode
-                              ? 'rgba(255, 255, 255, 0.05)'
-                              : 'rgba(255, 255, 255, 0.8)',
-                            border: isDarkMode
-                              ? '1px solid rgba(255, 255, 255, 0.1)'
-                              : '1px solid rgba(44, 62, 80, 0.1)',
-                            boxShadow: isDarkMode
-                              ? '0 4px 12px rgba(0, 0, 0, 0.2)'
-                              : '0 4px 12px rgba(0, 0, 0, 0.08)'
-                          }}
-                        >
-                          <CardContent sx={{ p: 2 }}>
-                            {/* Asset Header */}
-                            <Box sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 2,
-                              mb: 2,
-                              pb: 2,
-                              borderBottom: isDarkMode
-                                ? '1px solid rgba(255, 255, 255, 0.1)'
-                                : '1px solid rgba(44, 62, 80, 0.1)'
-                            }}>
-                              <Box sx={{
-                                width: 32, height: 32, borderRadius: '50%',
-                                background: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(44, 62, 80, 0.1)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                              }}>
-                                {(() => {
-                                  const meta = Object.values(TOKEN_METADATA).find(m => m.symbol === asset.symbol);
-                                  const icon = meta?.icon || '/assets/icons/ethereum.svg';
-                                  const alt = meta?.name || asset.symbol;
-                                  return <img src={icon} alt={alt} style={{ width: 18, height: 18 }} />;
-                                })()}
-                              </Box>
-                              <Box>
-                                <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem' }}>
-                                  {asset.symbol}
-                                </Typography>
-                                <Typography variant="caption" sx={{ opacity: 0.7, fontSize: '0.75rem' }}>
-                                  {asset.name}
-                                </Typography>
-                              </Box>
-                            </Box>
-
-                            {/* Market Data Grid */}
-                            <Grid container spacing={2}>
-                              <Grid item xs={6}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                  <Typography variant="caption" sx={{
-                                    opacity: 0.7,
-                                    fontSize: '0.7rem',
-                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(44, 62, 80, 0.7)'
-                                  }}>
-                                    Total Supplied
-                                  </Typography>
-                                  <Typography variant="body2" sx={{
-                                    fontWeight: 600,
-                                    fontSize: '0.85rem',
-                                    mt: 0.5
-                                  }}>
-                                    {reserveTotals[asset.symbol]?.isDecrypted ? reserveTotals[asset.symbol]?.formattedTotalSupplied : '••••••••'}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-
-                              <Grid item xs={6}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                  <Typography variant="caption" sx={{
-                                    opacity: 0.7,
-                                    fontSize: '0.7rem',
-                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(44, 62, 80, 0.7)'
-                                  }}>
-                                    Supply APY
-                                  </Typography>
-                                  <Typography variant="body2" sx={{
-                                    fontWeight: 600,
-                                    fontSize: '0.85rem',
-                                    mt: 0.5
-                                  }}>
-                                    —
-                                  </Typography>
-                                </Box>
-                              </Grid>
-
-                              <Grid item xs={6}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                  <Typography variant="caption" sx={{
-                                    opacity: 0.7,
-                                    fontSize: '0.7rem',
-                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(44, 62, 80, 0.7)'
-                                  }}>
-                                    Total Borrowed
-                                  </Typography>
-                                  <Typography variant="body2" sx={{
-                                    fontWeight: 600,
-                                    fontSize: '0.85rem',
-                                    mt: 0.5
-                                  }}>
-                                    {reserveTotals[asset.symbol]?.isDecrypted ? reserveTotals[asset.symbol]?.formattedTotalBorrowed : '••••••••'}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-
-                              <Grid item xs={6}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                  <Typography variant="caption" sx={{
-                                    opacity: 0.7,
-                                    fontSize: '0.7rem',
-                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(44, 62, 80, 0.7)'
-                                  }}>
-                                    Borrow APY
-                                  </Typography>
-                                  <Typography variant="body2" sx={{
-                                    fontWeight: 600,
-                                    fontSize: '0.85rem',
-                                    mt: 0.5
-                                  }}>
-                                    —
-                                  </Typography>
-                                </Box>
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </Box>
-                  </>
-                ) : (
-                  <Box sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    py: 6,
-                    px: 3,
-                    textAlign: 'center'
-                  }}>
-                    <Typography variant="h6" sx={{ mb: 2, opacity: 0.7 }}>
-                      No Markets Available
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.6 }}>
-                      Markets will appear here once reserves are configured
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Box>
-        )}
-
-        {/* Supply Tab */}
-        {activeTab === 'supply' && (
-                  <Box>
-            {/* Supply Header */}
-            <Card sx={{
-              mb: 2,
-              background: isDarkMode
-                ? 'linear-gradient(135deg, #34495e 0%, #1f2325ff 0%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
-              color: isDarkMode ? 'white' : '#000000',
-              borderRadius: '4px',
-              border: isDarkMode 
-                ? '1px solid rgba(255, 255, 255, 0.1)'
-                : '1px solid rgba(44, 62, 80, 0.1)',
-              boxShadow: isDarkMode 
-                ? '0 4px 20px rgba(0, 0, 0, 0.3)'
-                : '0 4px 20px rgba(0, 0, 0, 0.1)'
-            }}>
-              <CardContent sx={{ p: 4 }}>
-
-                {/* Supply Overview Content */}
-                {supplySubTab === 'supply' && (
-                  <>
-                    {/* Supply Summary */}
-                    <Grid container spacing={4} sx={{ mb: 4 }}>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        Supply APY
-          </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        5.25%
-                      </Typography>
-                          </CardContent>
-                        </Card>
-                  </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        Total Supply
-                      </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        {vaultTVL}
-                      </Typography>
-                          </CardContent>
-                        </Card>
-                  </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Your Supply
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              {suppliedBalance}
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Share %
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              {sharePercentage}
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                  </>
-                )}
-
-              </CardContent>
-            </Card>
-
-            {/* Supply Token List */}
-            <Card sx={{ 
-              borderRadius: '0px', 
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-              background: isDarkMode 
-                ? 'linear-gradient(135deg, #2c3e50 0%, #1f2325ff 0%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
-              color: isDarkMode ? 'white' : '#000000',
-              border: isDarkMode 
-                ? '1px solid rgba(255, 255, 255, 0.1)'
-                : '1px solid rgba(44, 62, 80, 0.1)'
-            }}>
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-                {/* Supply Sub-tabs */}
-                <Box sx={{ mb: 3 }}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    borderBottom: 1, 
-                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(44, 62, 80, 0.1)',
-                    mb: 3
-                  }}>
-                    <Button
-                      onClick={() => setSupplySubTab('supply')}
-                      sx={{
-                        px: 3,
-                        py: 1.5,
-                        textTransform: 'none',
-                        fontWeight: '600',
-                        fontSize: '0.9rem',
-                        color: supplySubTab === 'supply' 
-                          ? (isDarkMode ? 'white' : '#000000')
-                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(44, 62, 80, 0.6)'),
-                        borderBottom: supplySubTab === 'supply' ? 2 : 0,
-                        borderColor: '#2196f3',
-                        borderRadius: 0,
-                        '&:hover': {
-                          background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(44, 62, 80, 0.05)'
-                        }
-                      }}
-                    >
-                      Supply
-                    </Button>
-                    <Button
-                      onClick={() => setSupplySubTab('position')}
-                      sx={{
-                        px: 3,
-                        py: 1.5,
-                        textTransform: 'none',
-                        fontWeight: '600',
-                        fontSize: '0.9rem',
-                        color: supplySubTab === 'position'
-                          ? (isDarkMode ? 'white' : '#000000')
-                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(44, 62, 80, 0.6)'),
-                        borderBottom: supplySubTab === 'position' ? 2 : 0,
-                        borderColor: '#2196f3',
-                        borderRadius: 0,
-                        '&:hover': {
-                          background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(44, 62, 80, 0.05)'
-                        }
-                      }}
-                    >
-                      <Box sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.75 }}>
-                        <span>My Position</span>
-                        {supplyPositionsCount > 0 && (
-                          <Typography
-                            component="span"
-                            sx={{
-                              fontWeight: 700,
-                              color: isDarkMode ? '#60a5fa' : '#2563eb'
-                            }}
-                          >
-                            [ {supplyPositionsCount} ]
-                          </Typography>
-                        )}
-                      </Box>
-                    </Button>
-                  </Box>
-                </Box>
-                
-                {/* Supply Content */}
-                {supplySubTab === 'supply' && (
-                  <>
-                    
-                      
-                    
-                    
-                    {/* Dynamic Asset Selector */}
-                    <DynamicAssetSelector
-                      assets={supplyAssets}
-                      mode="supply"
-                      onSelectAsset={(asset) => {
-                        console.log('Selected asset for supply:', asset);
-                        setSelectedAsset(asset);
-                        setShowSupplyModal(true);
-                      }}
-                      isDarkMode={isDarkMode}
-                      isLoading={isLoadingReserves}
-                    />
-                  </>
-                )}
-
-                {/* Supply Position Content - Within same card */}
-                {supplySubTab === 'position' && (
-                  <Box sx={{ mt: 4 }}>
-                    <PositionList
-                      suppliedBalance={suppliedBalance}
-                      hasSupplied={hasSupplied}
-                      isDecrypted={isDecryptingSupplied}
-                      onTransactionSuccess={refreshAllBalances}
-                      onNavigateToSupply={() => setSupplySubTab('supply')}
-                      isDarkMode={isDarkMode}
-                      masterSignature={masterSignature}
-                      getMasterSignature={getMasterSignature}
-                    />
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
-          </Box>
-        )}
-
-        {/* Borrow Tab */}
-        {activeTab === 'borrow' && (
-          <Box>
-            {/* Borrow Header */}
-            <Card sx={{
-              mb: 2,
-              background: isDarkMode
-                ? 'linear-gradient(135deg, #34495e 0%, #2c3e50 100%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
-              color: isDarkMode ? 'white' : '#000000',
-              borderRadius: '4px',
-              border: isDarkMode 
-                ? '1px solid rgba(255, 255, 255, 0.1)'
-                : '1px solid rgba(44, 62, 80, 0.1)',
-              boxShadow: isDarkMode 
-                ? '0 4px 20px rgba(0, 0, 0, 0.3)'
-                : '0 4px 20px rgba(0, 0, 0, 0.1)'
-            }}>
-              <CardContent sx={{ p: 4 }}>
-                
-                {/* Borrow Overview Content */}
-                <>
-                  {/* Borrow Summary */}
-                  <Grid container spacing={4} sx={{ mb: 4 }}>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        Borrow APY
-                  </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        8.50%
-                      </Typography>
-                          </CardContent>
-                        </Card>
-          </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        Available to Borrow
-                      </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                        {vaultTVL}
-                      </Typography>
-                          </CardContent>
-                        </Card>
-                  </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Your Borrow
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              $0.00
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(44, 62, 80, 0.05)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.3)'
-                            : '2px solid rgba(44, 62, 80, 0.4)',
-                          borderRadius: '4px',
-                          boxShadow: isDarkMode 
-                            ? '0 4px 12px rgba(0, 0, 0, 0.3)'
-                            : '0 4px 12px rgba(44, 62, 80, 0.15)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Health Factor
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              fontSize: { xs: '1.1rem', sm: '1.5rem' },
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              ∞
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                </>
-              </CardContent>
-            </Card>
-
-            {/* Borrow Token List */}
-            <Card sx={{ 
-              borderRadius: '4px', 
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-              background: isDarkMode 
-                ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
-              color: isDarkMode ? 'white' : '#000000',
-              border: isDarkMode 
-                ? '1px solid rgba(255, 255, 255, 0.1)'
-                : '1px solid rgba(44, 62, 80, 0.1)'
-            }}>
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-                {/* Borrow Sub-tabs */}
-                <Box sx={{ mb: 3 }}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    borderBottom: 1, 
-                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(44, 62, 80, 0.1)',
-                    mb: 3
-                  }}>
-                    <Button
-                      onClick={() => setBorrowSubTab('borrow')}
-                      sx={{
-                        px: 3,
-                        py: 1.5,
-                        textTransform: 'none',
-                        fontWeight: '600',
-                        fontSize: '0.9rem',
-                        color: borrowSubTab === 'borrow' 
-                          ? (isDarkMode ? 'white' : '#000000')
-                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(44, 62, 80, 0.6)'),
-                        borderBottom: borrowSubTab === 'borrow' ? 2 : 0,
-                        borderColor: '#9c27b0',
-                        borderRadius: 0,
-                        '&:hover': {
-                          background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(44, 62, 80, 0.05)'
-                        }
-                      }}
-                    >
-                      Borrow
-                    </Button>
-                    <Button
-                      onClick={() => setBorrowSubTab('position')}
-                      sx={{
-                        px: 3,
-                        py: 1.5,
-                        textTransform: 'none',
-                        fontWeight: '600',
-                        fontSize: '0.9rem',
-                        color: borrowSubTab === 'position' 
-                          ? (isDarkMode ? 'white' : '#000000')
-                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(44, 62, 80, 0.6)'),
-                        borderBottom: borrowSubTab === 'position' ? 2 : 0,
-                        borderColor: '#9c27b0',
-                        borderRadius: 0,
-                        '&:hover': {
-                          background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(44, 62, 80, 0.05)'
-                        }
-                      }}
-                    >
-                      My Position
-                    </Button>
-                  </Box>
-                </Box>
-                
-                {/* Borrow Content */}
-                {borrowSubTab === 'borrow' && (
-                  <>
-                
-                
-                {/* Dynamic Asset Selector for Borrow */}
-                <DynamicAssetSelector 
-                  assets={borrowAssets}
-                  mode="borrow"
-                  onSelectAsset={(asset) => {
-                    console.log('Selected asset for borrow:', asset);
-                    setSelectedAsset(asset);
-                    setShowBorrowModal(true);
-                  }}
+                <MarketsTab
+                  assets={supplyAssets}
+                  reserveTotals={totals}
+                  suppliedBalances={suppliedBalancesMap}
+                  borrowedBalances={borrowedBalances}
+                  onSupplyClick={handleSupplyClick}
+                  onBorrowClick={handleBorrowClick}
+                  onDecryptTotals={handleDecryptAllTotals}
                   isDarkMode={isDarkMode}
-                  isLoading={isLoadingReserves}
+                  isLoadingReserves={isLoadingReserves}
+                  isDecryptingTotals={isDecryptingTotals}
+                  userCollateralEnabledBySymbol={userCollateralEnabledBySymbol}
                 />
-
-
-                 
-                  </>
-                )}
-                
-                {/* My Borrow Position */}
-                {borrowSubTab === 'position' && (
-                  <>
-                    {/* Positions Header */}
-                    <Box sx={{
-                      display: { xs: 'none', sm: 'flex' },
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      p: 2,
-                      borderRadius: '0px',
-                      background: isDarkMode
-                        ? 'rgba(255, 255, 255, 0.08)'
-                        : 'rgba(44, 62, 80, 0.08)',
-                      border: isDarkMode
-                        ? '1px solid rgba(255, 255, 255, 0.15)'
-                        : '1px solid rgba(44, 62, 80, 0.15)',
-                      mb: 1
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '200px' }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: '600', opacity: 0.8 }}>
-                          Asset
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box sx={{ textAlign: 'center', minWidth: '100px' }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: '600', opacity: 0.8 }}>
-                            Borrowed
-                          </Typography>
-                        </Box>
-                        <Box sx={{ textAlign: 'center', minWidth: '100px' }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: '600', opacity: 0.8 }}>
-                            APY
-                          </Typography>
-                        </Box>
-                        <Box sx={{ textAlign: 'center', minWidth: '100px' }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: '600', opacity: 0.8 }}>
-                            Collateral
-                          </Typography>
-                        </Box>
-                        <Box sx={{ minWidth: '100px' }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: '600', opacity: 0.8 }}>
-                            Action
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-
-                    {/* Borrowed Positions List */}
-                    {(() => {
-                      const positions = Object.values(borrowedBalances || {}).filter((p: any) => p && p.hasBorrowed);
-                      if (positions.length === 0) {
-                        return (
-                          <Box sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            py: 6,
-                            px: 3,
-                            textAlign: 'center'
-                          }}>
-                            <Typography variant="h6" sx={{ mb: 2, opacity: 0.7 }}>
-                              No Borrow Positions
-                            </Typography>
-                            <Typography variant="body2" sx={{ opacity: 0.6, mb: 3 }}>
-                              Start borrowing assets against your collateral
-                            </Typography>
-                            <Button
-                              variant="contained"
-                              size="small"
-                              onClick={() => setBorrowSubTab('borrow')}
-                              sx={{
-                                background: 'linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%)',
-                                color: 'white',
-                                fontWeight: '600',
-                                px: 3,
-                                py: 1,
-                                borderRadius: '6px',
-                                textTransform: 'none',
-                                '&:hover': {
-                                  background: 'linear-gradient(135deg, #7b1fa2 0%, #9c27b0 100%)',
-                                  transform: 'translateY(-1px)'
-                                }
-                              }}
-                            >
-                              Start Borrowing
-                            </Button>
-                          </Box>
-                        );
-                      }
-
-                      return (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {positions.map((p: any) => (
-                            <Card
-                              key={`borrow-${p.symbol}`}
-                              sx={{
-                                borderRadius: '4px',
-                                background: isDarkMode
-                                  ? 'rgba(255, 255, 255, 0.05)'
-                                  : 'rgba(255, 255, 255, 0.8)',
-                                border: isDarkMode
-                                  ? '1px solid rgba(255, 255, 255, 0.1)'
-                                  : '1px solid rgba(44, 62, 80, 0.1)',
-                                boxShadow: isDarkMode
-                                  ? '0 4px 12px rgba(0, 0, 0, 0.2)'
-                                  : '0 4px 12px rgba(0, 0, 0, 0.08)'
-                              }}
-                            >
-                              <CardContent sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                {/* Asset */}
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                    {p.symbol}
-                                  </Typography>
-                                </Box>
-
-                                {/* Borrowed amount */}
-                                <Box sx={{ textAlign: 'center' }}>
-                                  <Typography variant="body2" sx={{
-                                    fontFamily: 'sans-serif',
-                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(44, 62, 80, 0.7)',
-                                    fontSize: '0.75rem',
-                                    mb: 0.5
-                                  }}>
-                                    Borrowed
-                                  </Typography>
-                                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                    {p.formattedBorrowed}
-                                  </Typography>
-                                </Box>
-
-                                {/* Action */}
-                                <Box>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() => {
-                                      setSelectedAsset({
-                                        address: p.address,
-                                        symbol: p.symbol,
-                                        decimals: p.decimals
-                                      });
-                                      setShowRepayModal(true);
-                                    }}
-                                    sx={{
-                                      color: isDarkMode ? 'white' : '#2c3e50',
-                                      borderColor: isDarkMode
-                                        ? 'rgba(255, 255, 255, 0.3)'
-                                        : 'rgba(44, 62, 80, 0.4)',
-                                      borderRadius: '4px',
-                                      textTransform: 'none',
-                                      fontWeight: '600',
-                                      px: 2,
-                                      py: 1,
-                                      '&:hover': {
-                                        borderColor: isDarkMode
-                                          ? 'rgba(255, 255, 255, 0.5)'
-                                          : 'rgba(44, 62, 80, 0.6)',
-                                        backgroundColor: isDarkMode
-                                          ? 'rgba(255, 255, 255, 0.05)'
-                                          : 'rgba(44, 62, 80, 0.05)',
-                                        transform: 'translateY(-1px)'
-                                      },
-                                      transition: 'all 0.3s ease'
-                                    }}
-                                  >
-                                    Repay
-                                  </Button>
-                                </Box>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </Box>
-                      );
-                    })()}
-                  </>
-                )}
               </CardContent>
             </Card>
-                </Box>
+          </Box>
         )}
 
         {/* Portfolio Tab */}
@@ -3064,7 +2375,7 @@ export default function Dashboard() {
               mt:0.15, 
               mb: 3, 
               background: isDarkMode 
-                ? 'linear-gradient(135deg, #34495e 0%, #2c3e50 100%)'
+                ? 'linear-gradient(135deg,  #011931ff 0%, #1f2325ff 0%)'
                 : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
               color: isDarkMode ? 'white' : '#000000',
               borderRadius: '0px',
@@ -3081,7 +2392,7 @@ export default function Dashboard() {
                   <Box sx={{ 
                     display: 'flex', 
                     borderBottom: 1, 
-                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(44, 62, 80, 0.1)',
+                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                     mb: 3
                   }}>
                     <Button
@@ -3092,9 +2403,9 @@ export default function Dashboard() {
                         textTransform: 'none',
                         fontWeight: '600',
                         fontSize: '0.9rem',
-                        color: portfolioSubTab === 'overview' 
+                        color: portfolioSubTab === 'overview'
                           ? (isDarkMode ? 'white' : '#000000')
-                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(44, 62, 80, 0.6)'),
+                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)'),
                         borderBottom: portfolioSubTab === 'overview' ? 2 : 0,
                         borderColor: '#2196f3',
                         borderRadius: 0,
@@ -3113,9 +2424,9 @@ export default function Dashboard() {
                         textTransform: 'none',
                         fontWeight: '600',
                         fontSize: '0.9rem',
-                        color: portfolioSubTab === 'history' 
+                        color: portfolioSubTab === 'history'
                           ? (isDarkMode ? 'white' : '#000000')
-                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(44, 62, 80, 0.6)'),
+                          : (isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)'),
                         borderBottom: portfolioSubTab === 'history' ? 2 : 0,
                         borderColor: '#2196f3',
                         borderRadius: 0,
@@ -3132,137 +2443,27 @@ export default function Dashboard() {
                 {/* Portfolio Overview Content */}
                 {portfolioSubTab === 'overview' && (
                   <>
-                    {/* Portfolio Summary */}
-                    <Grid container spacing={4} sx={{ mb: 4 }}>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.08)'
-                            : 'rgba(44, 62, 80, 0.08)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.2)'
-                            : '2px solid rgba(44, 62, 80, 0.3)',
-                          boxShadow: isDarkMode 
-                            ? '0 2px 8px rgba(0, 0, 0, 0.2)'
-                            : '0 2px 8px rgba(44, 62, 80, 0.1)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Total Portfolio Value
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              {suppliedBalance}
-                            </Typography>
-                          </CardContent>
-                        </Card>
+                    {/* Portfolio Analytics */}
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: isDarkMode ? 'white' : '#000000' }}>Portfolio Analytics</Typography>
+                      <Grid container spacing={{ xs: 2, sm: 3, md: 3 }} sx={{ mb: 4 }}>
+                        <Grid item xs={12}>
+                          <Tooltip title="Total number of active supply and borrow positions" arrow placement="top">
+                            <Card sx={{ p: { xs: 2, sm: 3 }, borderRadius: '8px', background: isDarkMode ? 'linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.02) 100%)' : 'linear-gradient(135deg, rgba(139,92,246,0.03) 0%, rgba(139,92,246,0.01) 100%)', border: `2px solid ${isDarkMode ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.08)'}`, '&:hover': { transform: 'scale(1.02)', transition: 'all 0.3s ease' } }}>
+                              <Box display="flex" alignItems="center" gap={2}>
+                                <AccountBalance sx={{ fontSize: 40, color: '#8b5cf6', opacity: 0.9 }} />
+                                <Box>
+                                  <Typography variant="body2" sx={{ opacity: isDarkMode ? 0.9 : 0.8 }}>Active Positions</Typography>
+                                  <Typography variant="h4" sx={{ fontWeight: 600 }}>{activePositionsCount}</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.6 }}>Supply + Borrow</Typography>
+                                </Box>
+                              </Box>
+                            </Card>
+                          </Tooltip>
+                        </Grid>
                       </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.08)'
-                            : 'rgba(44, 62, 80, 0.08)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.2)'
-                            : '2px solid rgba(44, 62, 80, 0.3)',
-                          boxShadow: isDarkMode 
-                            ? '0 2px 8px rgba(0, 0, 0, 0.2)'
-                            : '0 2px 8px rgba(44, 62, 80, 0.1)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Supplied Assets
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              {suppliedBalance}
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.08)'
-                            : 'rgba(44, 62, 80, 0.08)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.2)'
-                            : '2px solid rgba(44, 62, 80, 0.3)',
-                          boxShadow: isDarkMode 
-                            ? '0 2px 8px rgba(0, 0, 0, 0.2)'
-                            : '0 2px 8px rgba(44, 62, 80, 0.1)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Borrowed Assets
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              0.0000 ETH
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{
-                          background: isDarkMode 
-                            ? 'rgba(255, 255, 255, 0.08)'
-                            : 'rgba(44, 62, 80, 0.08)',
-                          border: isDarkMode 
-                            ? '2px solid rgba(255, 255, 255, 0.2)'
-                            : '2px solid rgba(44, 62, 80, 0.3)',
-                          boxShadow: isDarkMode 
-                            ? '0 2px 8px rgba(0, 0, 0, 0.2)'
-                            : '0 2px 8px rgba(44, 62, 80, 0.1)'
-                        }}>
-                          <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                            <Typography variant="body2" sx={{ 
-                              opacity: isDarkMode ? 0.8 : 0.7, 
-                              mb: 1,
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontWeight: isDarkMode ? '500' : '300',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              Net Worth
-                            </Typography>
-                            <Typography variant="h4" sx={{ 
-                              fontWeight: isDarkMode ? '600' : '400',
-                              color: isDarkMode ? 'white' : '#2c3e50',
-                              fontFamily: 'sans-serif'
-                            }}>
-                              {suppliedBalance}
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
+                    </Box>
+
                   <Box  display="flex">
                     {/* Asset Breakdown - Dynamic list of wallet confidential tokens */}
                     <WalletAssetBreakdown
@@ -3289,72 +2490,6 @@ export default function Dashboard() {
                     }}>
                     </Card>
                   </Box>
-                    {/* Performance Metrics */}
-                    <Card sx={{
-                      background: isDarkMode 
-                        ? 'rgba(255, 255, 255, 0.08)'
-                        : 'rgba(44, 62, 80, 0.08)',
-                      border: isDarkMode 
-                        ? '2px solid rgba(255, 255, 255, 0.2)'
-                        : '2px solid rgba(44, 62, 80, 0.3)',
-                      boxShadow: isDarkMode 
-                        ? '0 2px 8px rgba(0, 0, 0, 0.2)'
-                        : '0 2px 8px rgba(44, 62, 80, 0.1)'
-                    }}>
-                      <CardContent sx={{ p: 3 }}>
-                        <Typography variant="h6" sx={{ 
-                          fontWeight: '600', 
-                          mb: 3, 
-                          color: isDarkMode ? 'white' : '#2c3e50',
-                          fontFamily: 'sans-serif' 
-                        }}>
-                          Performance Metrics
-                        </Typography>
-                        
-                        <Grid container spacing={3}>
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ textAlign: 'center', p: 2 }}>
-                              <Typography variant="body2" sx={{ 
-                                opacity: isDarkMode ? 0.8 : 0.7, 
-                                mb: 1,
-                                color: isDarkMode ? 'white' : '#2c3e50',
-                                fontWeight: isDarkMode ? '500' : '300',
-                                fontFamily: 'sans-serif'
-                              }}>
-                                Total Yield Earned
-                              </Typography>
-                              <Typography variant="h5" sx={{ 
-                                fontWeight: isDarkMode ? '600' : '400',
-                                color: isDarkMode ? 'white' : '#2c3e50',
-                                fontFamily: 'sans-serif'
-                              }}>
-                                0.0000 ETH
-                              </Typography>
-                            </Box>
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ textAlign: 'center', p: 2 }}>
-                              <Typography variant="body2" sx={{ 
-                                opacity: isDarkMode ? 0.8 : 0.7, 
-                                mb: 1,
-                                color: isDarkMode ? 'white' : '#2c3e50',
-                                fontWeight: isDarkMode ? '500' : '300',
-                                fontFamily: 'sans-serif'
-                              }}>
-                                Current APY
-                              </Typography>
-                              <Typography variant="h5" sx={{ 
-                                fontWeight: isDarkMode ? '600' : '400',
-                                color: isDarkMode ? 'white' : '#2c3e50',
-                                fontFamily: 'sans-serif'
-                              }}>
-                                5.25%
-                              </Typography>
-                            </Box>
-                          </Grid>
-                        </Grid>
-                      </CardContent>
-                    </Card>
                   </>
                 )}
                 
@@ -3549,8 +2684,8 @@ export default function Dashboard() {
           sx={{
             '--swap-backdrop-bg': isDarkMode ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.15)',
             '--swap-panel-bg': isDarkMode 
-              ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #2c3e50 100%)'
-              : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%)',
+              ? 'linear-gradient(135deg, #2c3e50 0%, #1f2325ff 0%, #1f2325ff 0%)'
+              : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 0%, #ffffff 0%)',
             '--swap-panel-border': isDarkMode 
               ? '1px solid rgba(255, 255, 255, 0.1)'
               : '1px solid rgba(44, 62, 80, 0.1)',
@@ -3565,7 +2700,7 @@ export default function Dashboard() {
               ? 'linear-gradient(45deg, #ecf0f1, #bdc3c7)'
               : 'linear-gradient(45deg, #2c3e50, #34495e)',
             '--swap-token-bg': isDarkMode 
-              ? 'linear-gradient(135deg, #34495e 0%, #2c3e50 100%)'
+              ? 'linear-gradient(135deg, #1f2325ff 0%, #1f2325ff 0%)'
               : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
             '--swap-token-border': isDarkMode 
               ? '1px solid rgba(255, 255, 255, 0.1)'
@@ -3589,16 +2724,16 @@ export default function Dashboard() {
               : '1px solid rgba(44, 62, 80, 0.15)',
             '--swap-amount-text': isDarkMode ? '#fff' : '#000000',
             '--swap-details-bg': isDarkMode 
-              ? 'linear-gradient(135deg, #34495e 0%, #2c3e50 100%)'
+              ? 'linear-gradient(135deg, #1f2325ff 0%, #1f2325ff 0%)'
               : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
             '--swap-details-border': isDarkMode 
               ? '1px solid rgba(255, 255, 255, 0.1)'
               : '1px solid rgba(44, 62, 80, 0.1)',
             '--swap-button-bg': isDarkMode 
-              ? 'rgba(255, 255, 255, 0.1)'
-              : 'rgba(44, 62, 80, 0.15)',
+              ? '#F5DCC6'
+              : '#F5DCC6',
             '--swap-button-text': isDarkMode 
-              ? 'rgba(255, 255, 255, 0.8)'
+              ? 'rgba(0, 0, 0, 0.9)'
               : 'rgba(0, 0, 0, 0.9)',
             '--swap-readonly-text': isDarkMode 
               ? 'rgba(255, 255, 255, 0.8)'
@@ -3632,7 +2767,7 @@ export default function Dashboard() {
               ? '1px solid rgba(255, 255, 255, 0.1)'
               : '1px solid rgba(44, 62, 80, 0.1)',
             '--swap-dropdown-bg': isDarkMode 
-              ? 'rgba(44, 62, 80, 0.95)'
+              ? '#1f2325ff'
               : 'rgba(255, 255, 255, 0.95)',
             '--swap-dropdown-border': isDarkMode 
               ? '1px solid rgba(255, 255, 255, 0.2)'
@@ -3665,7 +2800,7 @@ export default function Dashboard() {
               ? 'rgba(255, 255, 255, 0.5)'
               : 'rgba(0, 0, 0, 0.5)',
             '--swap-switch-bg': isDarkMode 
-              ? 'linear-gradient(45deg, #34495e, #2c3e50)'
+              ? 'linear-gradient(45deg, #1f2325ff 0% , #1f2325ff 0%)'
               : 'linear-gradient(45deg, #e9ecef, #f8f9fa)',
             '--swap-switch-shadow': isDarkMode 
               ? '0 6px 16px rgba(52, 73, 94, 0.4)'
@@ -4057,7 +3192,7 @@ export default function Dashboard() {
                       className={styles.primaryAction}
                       sx={{
                         background: swapAmount && parseFloat(swapAmount) > 0 && availableTokens.find(t => t.symbol === selectedToken)?.functional && !showBalanceError && (!isReversed || (fheInitialized && !fheError))
-                          ? 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)'
+                          ? 'linear-gradient(135deg, #efbe84 0%, #efbe84 0%)'
                           : undefined,
                         color: swapAmount && parseFloat(swapAmount) > 0 && availableTokens.find(t => t.symbol === selectedToken)?.functional && !showBalanceError && (!isReversed || (fheInitialized && !fheError))
                           ? 'white'
@@ -4068,11 +3203,11 @@ export default function Dashboard() {
                         borderRadius: '0px',
                         py: 1,
                         boxShadow: swapAmount && parseFloat(swapAmount) > 0 && availableTokens.find(t => t.symbol === selectedToken)?.functional && !showBalanceError && (!isReversed || (fheInitialized && !fheError))
-                          ? '0 4px 12px rgba(52, 152, 219, 0.3)'
+                          ? '0 4px 12px rgba(245, 245, 245, 1)'
                           : 'none',
                         '&:hover': swapAmount && parseFloat(swapAmount) > 0 && availableTokens.find(t => t.symbol === selectedToken)?.functional && !showBalanceError && (!isReversed || (fheInitialized && !fheError)) ? {
-                          background: 'linear-gradient(135deg, #2980b9 0%, #3498db 100%)',
-                          boxShadow: '0 6px 16px rgba(52, 152, 219, 0.4)'
+                          background: 'linear-gradient(135deg, #efbe84 0%, #efbe84 0%)',
+                          boxShadow: '0 6px 16px rgba(255, 255, 255, 1)'
                         } : {},
                         transition: 'all 0.2s ease'
                       }}
@@ -4212,7 +3347,7 @@ export default function Dashboard() {
               ? '1px solid rgba(255, 255, 255, 0.1)'
               : '1px solid rgba(44, 62, 80, 0.1)',
             background: isDarkMode 
-              ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
+              ? 'linear-gradient(135deg, #2c3e50 0%, #1f2325ff 0%)'
               : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
             backdropFilter: 'blur(10px)',
             color: isDarkMode ? 'white' : '#000000'
@@ -4242,13 +3377,13 @@ export default function Dashboard() {
             
             {/* Day/Night Mode Toggle */}
             <Box
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={toggleTheme}
               sx={{
                 width: 60,
                 height: 28,
                 borderRadius: '14px',
                 background: isDarkMode 
-                  ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
+                  ? 'linear-gradient(135deg, #2c3e50 0%, #1f2325ff 0%)'
                   : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
                 border: isDarkMode 
                   ? '1px solid rgba(255, 255, 255, 0.1)'

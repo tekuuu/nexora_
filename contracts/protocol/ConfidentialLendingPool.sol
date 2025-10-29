@@ -6,398 +6,353 @@ import {IConfidentialLendingPool} from "../interfaces/IConfidentialLendingPool.s
 import {IConfidentialLendingPoolView} from "../interfaces/IConfidentialLendingPoolView.sol";
 import {IConfidentialPoolConfigurator} from "../interfaces/IConfidentialPoolConfigurator.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
-
-// Logic & Libraries
 import {SupplyLogic} from "./logic/SupplyLogic.sol";
 import {BorrowLogic} from "./logic/BorrowLogic.sol";
-import {Types} from "../libraries/Types.sol";
+import {Types} from "../libraries/Types.sol"; 
 import {Errors} from "../libraries/Errors.sol";
-import {AssetUtils} from "../libraries/AssetUtils.sol";
-import {SafeFHEOperations} from "../libraries/SafeFHEOperations.sol";
-import {SafeFHEOperations128} from "../libraries/SafeFHEOperations128.sol";
+import {AssetUtils64} from "../libraries/AssetUtils64.sol";
+import {SafeFHEOperations} from "../libraries/SafeFHEOperations.sol"; 
 import {SafeMath64} from "../libraries/SafeMath64.sol";
-
-// Access & Config
 import {ACLManager} from "../access/ACLManager.sol";
-import {Constants} from "../config/Constants.sol";
+import {Constants} from "../config/Constants.sol"; 
 import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
-
-// OpenZeppelin
 import {ConfidentialFungibleToken} from "@openzeppelin/confidential-contracts/token/ConfidentialFungibleToken.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-// FHEVM
-import {FHE, euint64, ebool, externalEuint64, euint128} from "@fhevm/solidity/lib/FHE.sol";
+import {FHE, euint64, ebool, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 
 
 contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendingPoolView, ReentrancyGuard, SepoliaConfig {
+
     using SafeFHEOperations for euint64;
-    using SafeFHEOperations128 for euint128;
     using SupplyLogic for Types.ConfidentialReserve;
     using BorrowLogic for Types.ConfidentialUserPosition;
     using FHE for euint64;
     using FHE for ebool;
-    using FHE for euint128;
     using SafeMath64 for uint64;
-    
+    // ---------------------------------------------
+
     // Protocol Configuration
     ACLManager public immutable aclManager;
     IConfidentialPoolConfigurator public configurator;
     IPriceOracle public priceOracle;
     bool public paused;
-    
-    // --- V0 SIMPLIFICATION ---
-    address public cethAddress;   // The ONLY collateral asset
-    address public cusdcAddress;  // The ONLY borrowable asset
-    // -------------------------
+
+    address public cethAddress; // The ONLY collateral asset (Set via admin)
+
 
     // Reserve configuration
     mapping(address => Types.ConfidentialReserve) public reserves;
     address[] public reserveList;
-    
-    // User Positions
-    mapping(address => mapping(address => euint64)) internal _userSuppliedBalances;
-    mapping(address => mapping(address => euint64)) internal _userBorrowedBalances;
-    mapping(address => Types.ConfidentialUserPosition) internal _userPositions;
+
+    // User Positions (Using simplified Types.ConfidentialUserPosition)
+    mapping(address => mapping(address => euint64)) internal _userSuppliedBalances; // Stores 6-decimal amounts
+    mapping(address => mapping(address => euint64)) internal _userBorrowedBalances; // Stores 6-decimal amounts
+    mapping(address => Types.ConfidentialUserPosition) internal _userPositions; // Uses simplified struct
     mapping(address => mapping(address => bool)) public userCollateralEnabled;
 
-    // Index mappings are no longer needed as we don't manage arrays
-    
-    // ========== MODIFIERS (unchanged) ==========
-    
+
+    // ========== MODIFIERS ==========
+
     modifier onlyConfigurator() {
-        require(msg.sender == address(configurator), Errors.ONLY_POOL_ADMIN);
+        require(msg.sender == address(configurator), Errors.ONLY_POOL_CONFIGURATOR);
         _;
     }
-    
+
     modifier onlyPoolAdmin() {
         require(aclManager.isPoolAdmin(msg.sender), Errors.ONLY_POOL_ADMIN);
         _;
     }
-    
+
     modifier onlyEmergencyAdmin() {
-        require(aclManager.isEmergencyAdmin(msg.sender) || aclManager.isPoolAdmin(msg.sender), Errors.UNAUTHORIZED_ACCESS);
+        require(aclManager.isEmergencyAdmin(msg.sender) || aclManager.isPoolAdmin(msg.sender), Errors.ONLY_EMERGENCY_ADMIN);
         _;
     }
-    
+
     modifier whenNotPaused() {
         require(!paused, Errors.PROTOCOL_PAUSED);
         _;
     }
-    
+
     modifier onlyActiveReserve(address asset) {
         require(reserves[asset].active, Errors.RESERVE_NOT_ACTIVE);
         _;
     }
-    
+
     modifier onlyBorrowingEnabled(address asset) {
         require(reserves[asset].borrowingEnabled, Errors.BORROWING_NOT_ENABLED);
         _;
     }
-    
-    // ========== CONSTRUCTOR (unchanged) ==========
+
+    // ========== CONSTRUCTOR ==========
 
     constructor(address _aclManager, address _configurator, address _priceOracle) {
         require(_aclManager != address(0), Errors.ZERO_ADDRESS);
         require(_configurator != address(0), Errors.ZERO_ADDRESS);
         require(_priceOracle != address(0), Errors.ZERO_ADDRESS);
-        
+
         aclManager = ACLManager(_aclManager);
         configurator = IConfidentialPoolConfigurator(_configurator);
         priceOracle = IPriceOracle(_priceOracle);
         paused = false;
     }
-    
+
     // ========== CONFIGURATION FUNCTIONS ==========
-    
+
     function setConfigurator(address _configurator) external onlyPoolAdmin {
         require(_configurator != address(0), Errors.ZERO_ADDRESS);
         configurator = IConfidentialPoolConfigurator(_configurator);
     }
-    
+
     function setPriceOracle(address _priceOracle) external onlyPoolAdmin {
         require(_priceOracle != address(0), Errors.ZERO_ADDRESS);
         priceOracle = IPriceOracle(_priceOracle);
     }
 
-    /**
-     * @notice V0 - Sets the single collateral and borrowable assets
-     */
-    function setV0Assets(address _ceth, address _cusdc) external onlyPoolAdmin {
-        require(reserves[_ceth].isCollateral, "cETH not a collateral");
-        require(reserves[_cusdc].borrowingEnabled, "cUSDC not borrowable");
+    function setCollateralAsset(address _ceth) external onlyPoolAdmin {
+        require(reserves[_ceth].isCollateral, Errors.RESERVE_NOT_COLLATERAL);
         cethAddress = _ceth;
-        cusdcAddress = _cusdc;
     }
-    
-    // ========== EMERGENCY FUNCTIONS (unchanged) ==========
-    
+
+    // ========== EMERGENCY FUNCTIONS ==========
+
     event ProtocolPaused(address indexed admin, uint64 timestamp);
     event ProtocolUnpaused(address indexed admin, uint64 timestamp);
-    
+
     function pause() external onlyEmergencyAdmin {
-        require(!paused, "Already paused");
+        require(!paused, Errors.PROTOCOL_ALREADY_PAUSED);
         paused = true;
         emit ProtocolPaused(msg.sender, uint64(block.timestamp));
     }
-    
+
     function unpause() external onlyEmergencyAdmin {
-        require(paused, "Not paused");
+        require(paused, Errors.PROTOCOL_NOT_PAUSED);
         paused = false;
         emit ProtocolUnpaused(msg.sender, uint64(block.timestamp));
     }
-    
-    // ========== USER OPERATIONS (SIMPLIFIED) ==========
-    
-    /**
-     * @notice Supply logic is now simple, no cache updates
-     */
+
+    // ========== USER OPERATIONS (Refactored for V0+ 6-decimal euint64) ==========
+
     function supply(
         address asset,
-        externalEuint64 amount,
+        externalEuint64 amountE6,
         bytes calldata inputProof
     ) external override nonReentrant whenNotPaused onlyActiveReserve(asset) {
-        
+
         _userSuppliedBalances[msg.sender][asset] = SupplyLogic.executeSupply(
             asset,
-            amount,
+            amountE6,
             inputProof,
             reserves[asset],
             _userSuppliedBalances[msg.sender][asset],
             _userPositions[msg.sender]
         );
-
         emit Supply(asset, msg.sender);
     }
-    
-    /**
-     * @notice Withdraw logic is now "Just-in-Time"
-     */
+
     function withdraw(
         address asset,
-        externalEuint64 amount,
+        externalEuint64 amountE6,
         bytes calldata inputProof
     ) external override nonReentrant whenNotPaused onlyActiveReserve(asset) {
-  
+
         Types.WithdrawParams memory params;
         params.asset = asset;
         params.userBalance = _userSuppliedBalances[msg.sender][asset];
         params.inputProof = inputProof;
         params.user = msg.sender;
-        params.withdrawAmount = FHE.fromExternal(amount, inputProof);
-        
-        _executeWithdrawOptimized(params);
+        params.withdrawAmount = FHE.fromExternal(amountE6, inputProof);
+
+        if (asset == cethAddress && userCollateralEnabled[msg.sender][cethAddress]) {
+            _executeWithdrawCollateral_V0plus(params);
+        } else {
+            ebool IsSafe = params.withdrawAmount.le(params.userBalance);
+            euint64 safeWithdrawAmountE6 = FHE.select(IsSafe, params.withdrawAmount, FHE.asEuint64(0));
+            _finalizeWithdrawal(params, safeWithdrawAmountE6);
+        }
     }
 
-    function _executeWithdrawOptimized(Types.WithdrawParams memory params) internal {
-        bool isCollateral = (params.asset == cethAddress) && 
-                            userCollateralEnabled[params.user][params.asset];
-        
-        euint64 withdrawAmount = params.withdrawAmount;
+    function _executeWithdrawCollateral_V0plus(Types.WithdrawParams memory params) internal {
+         Types.ConfidentialUserPosition storage up = _userPositions[params.user];
+         euint64 withdrawAmount_cWETH_E6 = params.withdrawAmount;
+         euint64 currentSupplied_cWETH_E6 = params.userBalance;
 
-        if (!isCollateral) {
-            // Not collateral, just check balance
-            ebool IsSafe = withdrawAmount.le(params.userBalance);
-            withdrawAmount = FHE.select(IsSafe, withdrawAmount, FHE.asEuint64(0));
-            _finalizeWithdrawal(params, withdrawAmount);
-            return;
-        }
+         euint64 totalDebtUSD_E6 = _getAccountDebtUSD_V0plus(params.user);
 
-        // --- IS COLLATERAL: "JUST-IN-TIME" HEALTH CHECK (V0) ---
-        (euint128 borrowPowerUSD, euint128 totalDebtUSD) = _getAccountHealth(params.user);
-        
-        euint128 availableMarginUSD = borrowPowerUSD.safeSub(totalDebtUSD);
-        
-        // Convert the requested *withdrawal amount* into its 12-decimal USD value
-        Types.ConfidentialReserve storage r = reserves[params.asset];
-        uint128 price = uint128(priceOracle.getPrice(params.asset));
-        
-        euint128 requestedWithdrawUSD = FHE.asEuint128(0);
-        if (price > 0) {
-            requestedWithdrawUSD = AssetUtils.getUsdValue(
-                params.withdrawAmount,
-                price,
-                r.decimals
-            );
-        }
-        
-        // Check if the withdrawal (in USD) is safe
-        ebool isSafe = requestedWithdrawUSD.le(availableMarginUSD);
-        euint64 safeWithdrawAmount = FHE.select(isSafe, params.withdrawAmount, FHE.asEuint64(0));
+         Types.ConfidentialReserve storage collateralReserve = reserves[cethAddress];
+         uint64 collateralPriceE6 = uint64(priceOracle.getPrice(cethAddress));
+         uint64 collateralFactor = collateralReserve.collateralFactor;
 
-        _finalizeWithdrawal(params, safeWithdrawAmount);
+         require(collateralPriceE6 > 0, Errors.ORACLE_PRICE_ZERO);
+
+         euint64 margin_cWETH_E6 = currentSupplied_cWETH_E6.safeSub(withdrawAmount_cWETH_E6);
+         euint64 marginUSD_E6 = AssetUtils64.getUsdValue64(margin_cWETH_E6, collateralPriceE6);
+
+         uint64 percentPrecision = Constants.PERCENT_PRECISION;
+         euint64 marginBorrowPowerUSD_E6 = FHE.div(
+             FHE.mul(marginUSD_E6, collateralFactor),
+             percentPrecision
+         );
+
+         ebool isValid = FHE.le(totalDebtUSD_E6, marginBorrowPowerUSD_E6);
+         euint64 safeWithdrawAmountE6 = FHE.select(isValid, withdrawAmount_cWETH_E6, FHE.asEuint64(0));
+
+         _finalizeWithdrawal(params, safeWithdrawAmountE6);
     }
 
-    function _finalizeWithdrawal(Types.WithdrawParams memory params, euint64 withdrawAmount) internal {
+    function _finalizeWithdrawal(Types.WithdrawParams memory params, euint64 withdrawAmountE6) internal {
         _userSuppliedBalances[params.user][params.asset] = SupplyLogic.executeWithdraw(
             params.asset,
-            withdrawAmount,
+            withdrawAmountE6,
             reserves[params.asset],
             params.userBalance,
             params.user
         );
         emit Withdraw(params.asset, params.user);
     }
-    
-    /**
-     * @notice Borrow logic is now "Just-in-Time" (V0)
-     */
+
+
     function borrow(
         address asset,
-        externalEuint64 amount,
+        externalEuint64 amountE6,
         bytes calldata inputProof
     ) external override nonReentrant whenNotPaused onlyActiveReserve(asset) onlyBorrowingEnabled(asset) {
-        
-        // --- V0 SIMPLIFICATION ---
-        // Only allow borrowing the single designated borrowable asset
-        require(asset == cusdcAddress, "NOT_THE_DESIGNATED_BORROWABLE");
-        // -------------------------
 
-        // 1. Check if user has the single collateral (cETH) enabled
         require(userCollateralEnabled[msg.sender][cethAddress], Errors.NO_COLLATERAL_ENABLED);
+        Types.ConfidentialUserPosition storage up = _userPositions[msg.sender];
+        if (up.currentDebtAsset != address(0) && up.currentDebtAsset != asset) {
+            revert (Errors.MULTIPLE_DEBTS_NOT_ALLOWED);
+        }
 
-        // 2. Perform "Just-in-Time" health calculation
-        (euint128 borrowPowerUSD, euint128 totalDebtUSD) = _getAccountHealth(msg.sender);
+        euint64 borrowingPowerUSD_E6 = _getAccountBorrowPowerUSD_V0plus(msg.sender);
 
-        // 3. Calculate available margin in 12-decimal USD
-        euint128 availableMarginUSD = borrowPowerUSD.safeSub(totalDebtUSD);
+        Types.ConfidentialReserve storage borrowReserve = reserves[asset];
+        uint64 borrowPriceE6 = uint64(priceOracle.getPrice(asset));
+        require(borrowPriceE6 > 0, Errors.ORACLE_PRICE_ZERO);
 
-        // 4. Get the requested borrow amount (euint64)
-        euint64 borrowAmount = FHE.fromExternal(amount, inputProof);
+        euint64 requestedAmountE6 = FHE.fromExternal(amountE6, inputProof);
+        euint64 currentDebtBalanceE6 = _userBorrowedBalances[msg.sender][asset];
 
-        // 5. Convert the requested *borrow amount* into its 12-decimal USD value
-        Types.ConfidentialReserve storage reserve = reserves[asset];
-        uint128 price = uint128(priceOracle.getPrice(asset));
-        require(price > 0, "PRICE_TARGET_0");
-        
-        euint128 requestedBorrowUSD = AssetUtils.getUsdValue(
-            borrowAmount,
-            price,
-            reserve.decimals
-        );
+        euint64 currentDebtUSD_E6 = FHE.asEuint64(0);
+        if (up.currentDebtAsset == asset) {
+             currentDebtUSD_E6 = AssetUtils64.getUsdValue64(currentDebtBalanceE6, borrowPriceE6);
+        }
 
-        // 6. Check if the borrow (in USD) is safe
-        ebool isSafe = requestedBorrowUSD.le(availableMarginUSD);
+        euint64 requestedAmountUSD_E6 = AssetUtils64.getUsdValue64(requestedAmountE6, borrowPriceE6);
+        euint64 newTotalDebtUSD_E6 = currentDebtUSD_E6.safeAdd(requestedAmountUSD_E6);
 
-        // 7. Select the amount. If unsafe, borrow 0.
-        euint64 maxSafeBorrow = FHE.select(isSafe, borrowAmount, FHE.asEuint64(0));
+        ebool isValid = FHE.le(newTotalDebtUSD_E6, borrowingPowerUSD_E6);
+        euint64 maxSafeBorrowE6 = FHE.select(isValid, requestedAmountE6, FHE.asEuint64(0));
 
-        // 8. Execute the borrow
-        _userBorrowedBalances[msg.sender][asset] = BorrowLogic.executeBorrow(
+
+        euint64 newDebtBalanceE6 = BorrowLogic.executeBorrow(
             asset,
-            maxSafeBorrow,
-            reserve,
-            _userBorrowedBalances[msg.sender][asset],
-            _userPositions[msg.sender],
+            maxSafeBorrowE6,
+            borrowReserve,
+            currentDebtBalanceE6, 
+            up,
             msg.sender
         );
+        _userBorrowedBalances[msg.sender][asset] = newDebtBalanceE6;
 
-        // No need to track arrays, as we don't loop
-        
+        if (up.currentDebtAsset == address(0)) {
+             up.currentDebtAsset = asset;
+        }
+
         emit Borrow(asset, msg.sender);
     }
-    
-    /**
-     * @notice Repay logic is now simple, no cache updates
+
+/**
+     * @notice Repay logic - Calls BorrowLogic which handles de-normalization.
+     * @dev Does NOT clear currentDebtAsset tracker, even if balance reaches zero.
+     * @param asset The address of the asset to repay.
+     * @param amountE6 The encrypted amount (normalized to 6 decimals) to repay.
+     * @param inputProof FHEVM input proof for the encrypted amount.
      */
     function repay(
         address asset,
-        externalEuint64 amount,
+        externalEuint64 amountE6,
         bytes calldata inputProof
     ) external override nonReentrant whenNotPaused onlyActiveReserve(asset) {
-        euint64 payAmount = FHE.fromExternal(amount, inputProof);
-        euint64 userDebt = _userBorrowedBalances[msg.sender][asset];
-        
-        ebool isOverpaying = payAmount.gt(userDebt);
-        euint64 safePayAmount = FHE.select(isOverpaying, userDebt, payAmount);
+        Types.ConfidentialUserPosition storage up = _userPositions[msg.sender];
+        // Ensure they are repaying their current debt asset or have no debt
+        require(asset == up.currentDebtAsset || up.currentDebtAsset == address(0), Errors.INVALID_DEBT_REPAYMENT);
 
-        _userBorrowedBalances[msg.sender][asset] = BorrowLogic.executeRepay(
+        euint64 payAmountE6 = FHE.fromExternal(amountE6, inputProof);
+        euint64 userDebtE6 = _userBorrowedBalances[msg.sender][asset];
+
+        ebool isOverpaying = payAmountE6.gt(userDebtE6);
+        euint64 safePayAmountE6 = FHE.select(isOverpaying, userDebtE6, payAmountE6);
+
+        // Calls BorrowLogic.executeRepay which handles de-normalization internally
+        euint64 newDebtBalanceE6 = BorrowLogic.executeRepay(
             asset,
-            safePayAmount,
+            safePayAmountE6, // Pass 6-decimal amount
             reserves[asset],
-            userDebt
+            userDebtE6 // Pass 6-decimal balance
         );
+        _userBorrowedBalances[msg.sender][asset] = newDebtBalanceE6;
+
+        // --- REMOVED CONDITIONAL UPDATE ---
+        // The currentDebtAsset tracker is NOT modified here.
+        // It is only cleared by repayAll.
+        // ---------------------------------
 
         emit Repay(asset, msg.sender);
     }
-    
+
     function repayAll(address asset) external nonReentrant whenNotPaused onlyActiveReserve(asset) {
-        euint64 userDebt = _userBorrowedBalances[msg.sender][asset];
+        Types.ConfidentialUserPosition storage up = _userPositions[msg.sender];
+        require(asset == up.currentDebtAsset || up.currentDebtAsset == address(0), Errors.INVALID_DEBT_REPAYMENT);
+
+        euint64 userDebtE6 = _userBorrowedBalances[msg.sender][asset];
 
         _userBorrowedBalances[msg.sender][asset] = BorrowLogic.executeRepay(
             asset,
-            userDebt,
+            userDebtE6,
             reserves[asset],
-            userDebt
+            userDebtE6
         );
-        // No cache update needed
-        // No array management needed
+
+        // Clear the currentDebtAsset tracker since the debt is fully repaid
+        up.currentDebtAsset = address(0);
+
         emit Repay(asset, msg.sender);
     }
-    
-    // ========== VIEW FUNCTIONS (unchanged) ==========
-    
-    function getUserSuppliedBalance(
-        address user, 
-        address asset
-    ) external view override(IConfidentialLendingPool, IConfidentialLendingPoolView) returns (euint64) {
+
+    // ========== VIEW FUNCTIONS ==========
+    function getUserSuppliedBalance(address user, address asset) external view override(IConfidentialLendingPool, IConfidentialLendingPoolView) returns (euint64) {
         return _userSuppliedBalances[user][asset];
     }
-    
-    function getUserBorrowedBalance(
-        address user, 
-        address asset
-    ) external view override(IConfidentialLendingPool, IConfidentialLendingPoolView) returns (euint64) {
+    function getUserBorrowedBalance(address user, address asset) external view override(IConfidentialLendingPool, IConfidentialLendingPoolView) returns (euint64) {
         return _userBorrowedBalances[user][asset];
     }
-    
     function getUserPosition(address user) external view override(IConfidentialLendingPool, IConfidentialLendingPoolView) returns (Types.ConfidentialUserPosition memory) {
         return _userPositions[user];
     }
-    
     function getReserveData(address asset) external view override returns (Types.ConfidentialReserve memory) {
         return reserves[asset];
     }
-    
     function getReserveList() external view override returns (address[] memory) {
         return reserveList;
     }
 
-    // ========== COLLATERAL TOGGLE (SIMPLIFIED) ==========
-
+    // ========== COLLATERAL TOGGLE ==========
     event UserCollateralChanged(address indexed user, address indexed asset, bool useAsCollateral);
-
-    function setUserUseReserveAsCollateral(address asset, bool useAsCollateral)
-        external
-        whenNotPaused
-        onlyActiveReserve(asset)
-    {
-        // --- V0 SIMPLIFICATION ---
-        require(asset == cethAddress, "NOT_THE_DESIGNATED_COLLATERAL");
-        // -------------------------
-        
-        require(reserves[asset].isCollateral, "RES_NOT_COLLATERAL");
-        
-        // No cache updates, this function is now very simple and cheap
+    function setUserUseReserveAsCollateral(address asset, bool useAsCollateral) external whenNotPaused onlyActiveReserve(asset) {
+        require(asset == cethAddress, Errors.NOT_THE_DESIGNATED_COLLATERAL);
+        require(reserves[asset].isCollateral, Errors.RESERVE_NOT_COLLATERAL);
         userCollateralEnabled[msg.sender][asset] = useAsCollateral;
-
-        // No array management needed
-
         emit UserCollateralChanged(msg.sender, asset, useAsCollateral);
     }
-    
-    // ========== KEEPER FUNCTION (REMOVED) ==========
-    // The `refreshUserHealth` function has been removed.
-    
-    // ========== INTERNAL CONFIGURATION (unchanged) ==========
-    
+
+    // ========== INTERNAL CONFIGURATION ==========
     function initReserve(
         address asset,
         bool borrowingEnabled,
         bool isCollateral,
-        uint64 collateralFactor
+        uint64 collateralFactor // Expects basis points (e.g., 7500)
     ) external onlyConfigurator {
-        require(reserves[asset].underlyingAsset == address(0), "Reserve already initialized");
+        require(reserves[asset].underlyingAsset == address(0), Errors.RESERVE_ALREADY_INITIALIZED);
 
         Types.ConfidentialReserve storage reserve = reserves[asset];
         reserve.underlyingAsset = asset;
@@ -412,7 +367,7 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         reserve.collateralFactor = collateralFactor;
         reserve.supplyCap = 0;
         reserve.borrowCap = 0;
-        reserve.decimals = ConfidentialFungibleToken(asset).decimals(); // <-- Still critical
+        reserve.decimals = ConfidentialFungibleToken(asset).decimals();
 
         FHE.makePubliclyDecryptable(reserve.totalSupplied);
         FHE.makePubliclyDecryptable(reserve.totalBorrowed);
@@ -420,16 +375,17 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
 
         reserveList.push(asset);
     }
-    
+
     function updateReserveConfig(
         address asset,
         bool active,
         bool borrowingEnabled,
         bool isCollateral,
-        uint64 collateralFactor,
-        uint64 supplyCap,
-        uint64 borrowCap
+        uint64 collateralFactor, // Expects basis points
+        uint64 supplyCap, // Expects 6-decimal normalized cap
+        uint64 borrowCap // Expects 6-decimal normalized cap
     ) external onlyConfigurator {
+        require(reserves[asset].underlyingAsset != address(0), Errors.RESERVE_NOT_INITIALIZED);
         Types.ConfidentialReserve storage reserve = reserves[asset];
         reserve.active = active;
         reserve.borrowingEnabled = borrowingEnabled;
@@ -439,64 +395,47 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         reserve.borrowCap = borrowCap;
     }
 
-   // ========== INTERNAL HEALTH CALCULATION (V0) ==========
+   // ========== INTERNAL HEALTH CALCULATION (Refactored for V0+ 6-decimal euint64) ==========
 
-   /**
-    * @notice V0 "Just-in-Time" health calculator.
-    * @dev This is safe ONLY because we have 1 collateral and 1 borrowable asset.
-    * This function contains NO LOOPS.
-    * @param user The user address to check.
-    * @return borrowPowerUSD Total 12-decimal USD value of borrowing power.
-    * @return totalDebtUSD Total 12-decimal USD value of all debts.
-    */
-    function _getAccountHealth(address user) 
-        internal 
-        returns (
-            euint128 borrowPowerUSD, 
-            euint128 totalDebtUSD
-        )
+   function _getAccountBorrowPowerUSD_V0plus(address user)
+        internal
+        returns (euint64 borrowPowerUSD_E6)
     {
-        // --- 1. CALCULATE TOTAL BORROW POWER (O(1) - NO LOOP) ---
-        borrowPowerUSD = FHE.asEuint128(0);
-
+        borrowPowerUSD_E6 = FHE.asEuint64(0);
         if (userCollateralEnabled[user][cethAddress]) {
             Types.ConfidentialReserve storage r = reserves[cethAddress];
-            uint128 price = uint128(priceOracle.getPrice(cethAddress));
-
-            if (r.active && r.isCollateral && price > 0) {
-                euint64 balance = _userSuppliedBalances[user][cethAddress];
-                
-                euint128 valueUSD = AssetUtils.getUsdValue(
-                    balance,
-                    price,
-                    r.decimals
+            uint64 priceE6 = uint64(priceOracle.getPrice(cethAddress));
+            if (r.active && r.isCollateral && priceE6 > 0) {
+                euint64 balanceE6 = _userSuppliedBalances[user][cethAddress];
+                euint64 valueUSD_E6 = AssetUtils64.getUsdValue64(balanceE6, priceE6);
+                borrowPowerUSD_E6 = FHE.div(
+                    FHE.mul(valueUSD_E6, r.collateralFactor),
+                    Constants.PERCENT_PRECISION
                 );
-
-                borrowPowerUSD = valueUSD.safeMul(r.collateralFactor)
-                                         .safeDiv(Constants.PRECISION);
             }
-        }
-
-        // --- 2. CALCULATE TOTAL DEBT (O(1) - NO LOOP) ---
-        totalDebtUSD = FHE.asEuint128(0);
-        Types.ConfidentialReserve storage r = reserves[cusdcAddress];
-        uint128 price = uint128(priceOracle.getPrice(cusdcAddress));
-
-        if (r.active && price > 0) {
-             euint64 debtBalance = _userBorrowedBalances[user][cusdcAddress];
-             
-             totalDebtUSD = AssetUtils.getUsdValue(
-                debtBalance,
-                price,
-                r.decimals
-             );
         }
     }
 
-    // ========== OTHER HELPERS (SIMPLIFIED) ==========
+   function _getAccountDebtUSD_V0plus(address user)
+        internal
+        returns (euint64 totalDebtUSD_E6)
+    {
+        totalDebtUSD_E6 = FHE.asEuint64(0);
+        Types.ConfidentialUserPosition storage up = _userPositions[user];
+        address debtAsset = up.currentDebtAsset;
 
+        if (debtAsset != address(0)) {
+            Types.ConfidentialReserve storage r = reserves[debtAsset];
+            uint64 priceE6 = uint64(priceOracle.getPrice(debtAsset));
+            if (r.active && priceE6 > 0) {
+                 euint64 debtBalanceE6 = _userBorrowedBalances[user][debtAsset];
+                 totalDebtUSD_E6 = AssetUtils64.getUsdValue64(debtBalanceE6, priceE6);
+            }
+        }
+    }
+
+    // ========== OTHER HELPERS ==========
     function _hasAnyCollateralEnabled(address user) internal view returns (bool) {
-       // V0 simplification: just check the single collateral asset
        return userCollateralEnabled[user][cethAddress];
     }
 }

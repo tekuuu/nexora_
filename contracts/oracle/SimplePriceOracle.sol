@@ -8,13 +8,13 @@ contract SimplePriceOracle is IPriceOracle, Ownable {
     mapping(address => uint64) public assetPrices;
     mapping(address => bool) public isPriceFeed;
 
-    // Default constant prices for common assets (in 1e12 format to fit uint64)
+    // Default constant prices for common assets (in 1e6 format to fit uint64)
     // These are reasonable defaults for testing/development
-    uint64 public constant DEFAULT_USDC_PRICE = 1e12;      // $1.00
-    uint64 public constant DEFAULT_USDT_PRICE = 1e12;      // $1.00
-    uint64 public constant DEFAULT_ETH_PRICE = 2000e12;    // $2000
-    uint64 public constant DEFAULT_BTC_PRICE = 40000e12;   // $40000
-    uint64 public constant DEFAULT_WETH_PRICE = 2000e12;   // $2000
+    uint64 public constant DEFAULT_USDC_PRICE = 1e6;      // $1.00
+    uint64 public constant DEFAULT_USDT_PRICE = 1e6;      // $1.00
+    uint64 public constant DEFAULT_ETH_PRICE = 2000e6;    // $2000
+    uint64 public constant DEFAULT_BTC_PRICE = 40000e6;   // $40000
+    uint64 public constant DEFAULT_WETH_PRICE = 2000e6;   // $2000
 
     // PriceUpdated event defined in IPriceOracle interface
     event PriceFeedAdded(address indexed priceFeed);
@@ -113,16 +113,6 @@ contract SimplePriceOracle is IPriceOracle, Ownable {
      * @dev Convenience function to set up common asset prices
      */
     function setDefaultPrices() external onlyOwner {
-        // Set common default prices
-        // Note: You'll need to replace these with actual token addresses
-        // For now, we'll use placeholder addresses
-        
-        // Example usage (replace with actual addresses):
-        // assetPrices[USDC_ADDRESS] = DEFAULT_USDC_PRICE;
-        // assetPrices[USDT_ADDRESS] = DEFAULT_USDT_PRICE;
-        // assetPrices[WETH_ADDRESS] = DEFAULT_WETH_PRICE;
-        // assetPrices[WBTC_ADDRESS] = DEFAULT_BTC_PRICE;
-        
-        emit PriceUpdated(address(0), DEFAULT_USDC_PRICE); // Placeholder event
+        emit PriceUpdated(address(0), DEFAULT_USDC_PRICE); 
     }
 }

@@ -381,18 +381,25 @@ export function useBorrowedBalances(
 
   /**
    * Initialize: fetch encrypted balances when address/connection changes
+   * Be resilient to brief reserve discovery hiccups: do not wipe state if assets list is momentarily empty.
    */
   useEffect(() => {
-    if (address && isConnected && POOL_ADDRESS && borrowAssetsKey) {
-      if (lastFetchedAssetsKeyRef.current !== borrowAssetsKey) {
-        console.log('🔄 Address connected, fetching encrypted borrowed balances...');
-        lastFetchedAssetsKeyRef.current = borrowAssetsKey;
-        fetchAllEncryptedBalances();
-      }
-    } else {
+    if (!address || !isConnected || !POOL_ADDRESS) {
       setBalances({});
       setEncryptedBalances({});
       lastFetchedAssetsKeyRef.current = '';
+      return;
+    }
+
+    // If assets list isn't ready yet, don't wipe; wait for next update
+    if (!borrowAssetsKey) {
+      return;
+    }
+
+    if (lastFetchedAssetsKeyRef.current !== borrowAssetsKey) {
+      console.log('🔄 Address connected, fetching encrypted borrowed balances...');
+      lastFetchedAssetsKeyRef.current = borrowAssetsKey;
+      fetchAllEncryptedBalances();
     }
   }, [address, isConnected, POOL_ADDRESS, borrowAssetsKey, fetchAllEncryptedBalances]);
 

@@ -34,7 +34,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("✅ ConfidentialWETH deployed!");
   console.log("   └─ Address:", cwethDeployment.address);
-  console.log("   └─ Decimals: 18");
+  console.log("   └─ Decimals: 6");
   console.log("");
 
   // ══════════════════════════════════════════════════════════════
@@ -82,7 +82,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("✅ ConfidentialDAI deployed!");
   console.log("   └─ Address:", cdaiDeployment.address);
-  console.log("   └─ Decimals: 18");
+  console.log("   └─ Decimals: 6");
   console.log("");
 
   // ══════════════════════════════════════════════════════════════

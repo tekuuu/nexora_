@@ -70,17 +70,4 @@ contract ConfidentialWETH is ConfidentialFungibleToken, Ownable, SepoliaConfig, 
         return 1;
     }
 
-    /// @notice Override decimals to match WETH (18 decimals)
-    /// @dev OpenZeppelin's ConfidentialFungibleToken defaults to 6, but WETH uses 18
-    function decimals() public pure override returns (uint8) {
-        return 18;
-    }
-
-    /// @notice Get token metadata
-    /// @return name The token name
-    /// @return symbol The token symbol
-    /// @return decimals The token decimals (18, same as WETH)
-    function getTokenInfo() external pure returns (string memory name, string memory symbol, uint8 decimals) {
-        return ("Confidential Wrapped Ether", "cWETH", 18);
-    }
 }

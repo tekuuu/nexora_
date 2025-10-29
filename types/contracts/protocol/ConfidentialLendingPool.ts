@@ -71,29 +71,14 @@ export declare namespace Types {
   };
 
   export type ConfidentialUserPositionStruct = {
-    totalBorrowPowerUSD: BytesLike;
-    totalDebtUSD: BytesLike;
-    totalSuppliedUSD: BytesLike;
-    collateralAssets: AddressLike[];
-    borrowedAssets: AddressLike[];
     initialized: boolean;
+    currentDebtAsset: AddressLike;
   };
 
   export type ConfidentialUserPositionStructOutput = [
-    totalBorrowPowerUSD: string,
-    totalDebtUSD: string,
-    totalSuppliedUSD: string,
-    collateralAssets: string[],
-    borrowedAssets: string[],
-    initialized: boolean
-  ] & {
-    totalBorrowPowerUSD: string;
-    totalDebtUSD: string;
-    totalSuppliedUSD: string;
-    collateralAssets: string[];
-    borrowedAssets: string[];
-    initialized: boolean;
-  };
+    initialized: boolean,
+    currentDebtAsset: string
+  ] & { initialized: boolean; currentDebtAsset: string };
 }
 
 export interface ConfidentialLendingPoolInterface extends Interface {
@@ -103,7 +88,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
       | "borrow"
       | "cethAddress"
       | "configurator"
-      | "cusdcAddress"
       | "getReserveData"
       | "getReserveList"
       | "getUserBorrowedBalance"
@@ -118,10 +102,10 @@ export interface ConfidentialLendingPoolInterface extends Interface {
       | "repayAll"
       | "reserveList"
       | "reserves"
+      | "setCollateralAsset"
       | "setConfigurator"
       | "setPriceOracle"
       | "setUserUseReserveAsCollateral"
-      | "setV0Assets"
       | "supply"
       | "unpause"
       | "updateReserveConfig"
@@ -154,10 +138,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "configurator",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "cusdcAddress",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -211,6 +191,10 @@ export interface ConfidentialLendingPoolInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "setCollateralAsset",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setConfigurator",
     values: [AddressLike]
   ): string;
@@ -221,10 +205,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "setUserUseReserveAsCollateral",
     values: [AddressLike, boolean]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setV0Assets",
-    values: [AddressLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "supply",
@@ -260,10 +240,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "configurator",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "cusdcAddress",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -305,6 +281,10 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "reserves", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "setCollateralAsset",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "setConfigurator",
     data: BytesLike
   ): Result;
@@ -314,10 +294,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "setUserUseReserveAsCollateral",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setV0Assets",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "supply", data: BytesLike): Result;
@@ -479,7 +455,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   aclManager: TypedContractMethod<[], [string], "view">;
 
   borrow: TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -487,8 +463,6 @@ export interface ConfidentialLendingPool extends BaseContract {
   cethAddress: TypedContractMethod<[], [string], "view">;
 
   configurator: TypedContractMethod<[], [string], "view">;
-
-  cusdcAddress: TypedContractMethod<[], [string], "view">;
 
   getReserveData: TypedContractMethod<
     [asset: AddressLike],
@@ -536,7 +510,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   protocolId: TypedContractMethod<[], [bigint], "view">;
 
   repay: TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -581,6 +555,12 @@ export interface ConfidentialLendingPool extends BaseContract {
     "view"
   >;
 
+  setCollateralAsset: TypedContractMethod<
+    [_ceth: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   setConfigurator: TypedContractMethod<
     [_configurator: AddressLike],
     [void],
@@ -599,14 +579,8 @@ export interface ConfidentialLendingPool extends BaseContract {
     "nonpayable"
   >;
 
-  setV0Assets: TypedContractMethod<
-    [_ceth: AddressLike, _cusdc: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-
   supply: TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -634,7 +608,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   >;
 
   withdraw: TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -649,7 +623,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "borrow"
   ): TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -658,9 +632,6 @@ export interface ConfidentialLendingPool extends BaseContract {
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "configurator"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "cusdcAddress"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getReserveData"
@@ -720,7 +691,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "repay"
   ): TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -768,6 +739,9 @@ export interface ConfidentialLendingPool extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "setCollateralAsset"
+  ): TypedContractMethod<[_ceth: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "setConfigurator"
   ): TypedContractMethod<[_configurator: AddressLike], [void], "nonpayable">;
   getFunction(
@@ -781,16 +755,9 @@ export interface ConfidentialLendingPool extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "setV0Assets"
-  ): TypedContractMethod<
-    [_ceth: AddressLike, _cusdc: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
     nameOrSignature: "supply"
   ): TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -822,7 +789,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "withdraw"
   ): TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;

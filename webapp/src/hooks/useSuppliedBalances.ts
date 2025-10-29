@@ -406,20 +406,28 @@ export function useSuppliedBalances(
   }, [masterSignature]);
 
   // Initialize: fetch encrypted balances when address/connection changes
+  // Be resilient to brief reserve discovery hiccups: do not wipe state if assets list is momentarily empty.
   useEffect(() => {
-    if (address && isConnected && POOL_ADDRESS && supplyAssetsKey) {
-      // Only fetch if the assets have actually changed
-      if (lastFetchedAssetsKeyRef.current !== supplyAssetsKey) {
-        console.log('🔄 Address connected, fetching encrypted balances...');
-        lastFetchedAssetsKeyRef.current = supplyAssetsKey;
-        fetchAllEncryptedBalances();
-      }
-    } else {
+    // Must have address, connection and pool to proceed
+    if (!address || !isConnected || !POOL_ADDRESS) {
       setBalances({});
       setEncryptedBalances({});
       lastFetchedAssetsKeyRef.current = '';
+      return;
     }
-  }, [address, isConnected, POOL_ADDRESS, supplyAssetsKey]);
+
+    // If assets list isn't ready yet, don't wipe existing state; wait for the next update
+    if (!supplyAssetsKey) {
+      return;
+    }
+
+    // Only fetch if the assets have actually changed
+    if (lastFetchedAssetsKeyRef.current !== supplyAssetsKey) {
+      console.log('🔄 Address connected, fetching encrypted balances...');
+      lastFetchedAssetsKeyRef.current = supplyAssetsKey;
+      fetchAllEncryptedBalances();
+    }
+  }, [address, isConnected, POOL_ADDRESS, supplyAssetsKey, fetchAllEncryptedBalances]);
 
   // Smart auto-decrypt effect - ONLY decrypt once when master signature is available
   // This EXACTLY matches the pattern from useConfidentialTokenBalance (lines 416-448)

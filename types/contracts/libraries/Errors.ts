@@ -26,21 +26,26 @@ export interface ErrorsInterface extends Interface {
       | "ASSET_ALREADY_INITIALIZED"
       | "ASSET_NOT_INITIALIZED"
       | "BORROWING_NOT_ENABLED"
+      | "BORROW_AMOUNT_TOO_LOW"
       | "BORROW_CAP_EXCEEDED"
       | "DEBT_AMOUNT_EXCEEDS_BALANCE"
       | "INSUFFICIENT_BALANCE"
       | "INSUFFICIENT_COLLATERAL"
       | "INVALID_AMOUNT"
       | "INVALID_ASSET"
+      | "INVALID_ASSET_DECIMALS"
       | "INVALID_BASE_RATE"
       | "INVALID_CLOSE_FACTOR"
+      | "INVALID_COLLATERAL"
       | "INVALID_COLLATERAL_FACTOR"
+      | "INVALID_DEBT_REPAYMENT"
       | "INVALID_INPUT_PROOF"
       | "INVALID_INTEREST_RATE_STRATEGY"
       | "INVALID_JUMP_MULTIPLIER"
       | "INVALID_KINK"
       | "INVALID_LIQUIDATION_BONUS"
       | "INVALID_LIQUIDATION_THRESHOLD"
+      | "INVALID_LIQUIDATOR"
       | "INVALID_MULTIPLIER"
       | "INVALID_PRICE"
       | "INVALID_RESERVE_CONFIGURATION"
@@ -48,18 +53,32 @@ export interface ErrorsInterface extends Interface {
       | "INVALID_TIMESTAMP"
       | "INVALID_USER_POSITION"
       | "LIQUIDATION_AMOUNT_TOO_HIGH"
+      | "LIQUIDATION_NOT_ALLOWED"
+      | "MULTIPLE_DEBTS_NOT_ALLOWED"
       | "NOT_INITIALIZED"
+      | "NOT_THE_DESIGNATED_COLLATERAL"
+      | "NO_DEBT_POSITION"
+      | "ONLY_EMERGENCY_ADMIN"
       | "ONLY_POOL_ADMIN"
+      | "ONLY_POOL_CONFIGURATOR"
       | "ONLY_PRICE_FEED"
       | "ORACLE_NOT_SET"
+      | "ORACLE_PRICE_ZERO"
       | "PRICE_NOT_SET"
+      | "PROTOCOL_ALREADY_PAUSED"
+      | "PROTOCOL_NOT_PAUSED"
       | "PROTOCOL_PAUSED"
+      | "REPAY_AMOUNT_EXCEEDS_DEBT"
+      | "REPAY_AMOUNT_TOO_LOW"
       | "RESERVE_ALREADY_INITIALIZED"
       | "RESERVE_NOT_ACTIVE"
+      | "RESERVE_NOT_INITIALIZED"
+      | "SINGLE_COLLATERAL_ONLY"
+      | "SUPPLY_AMOUNT_TOO_LOW"
       | "SUPPLY_CAP_EXCEEDED"
-      | "UNAUTHORIZED_ACCESS"
       | "USER_POSITION_ALREADY_INITIALIZED"
       | "USER_POSITION_NOT_INITIALIZED"
+      | "WITHDRAW_AMOUNT_TOO_LOW"
       | "ZERO_ADDRESS"
   ): FunctionFragment;
 
@@ -77,6 +96,10 @@ export interface ErrorsInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "BORROWING_NOT_ENABLED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "BORROW_AMOUNT_TOO_LOW",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -104,6 +127,10 @@ export interface ErrorsInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "INVALID_ASSET_DECIMALS",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "INVALID_BASE_RATE",
     values?: undefined
   ): string;
@@ -112,7 +139,15 @@ export interface ErrorsInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "INVALID_COLLATERAL",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "INVALID_COLLATERAL_FACTOR",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "INVALID_DEBT_REPAYMENT",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -137,6 +172,10 @@ export interface ErrorsInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "INVALID_LIQUIDATION_THRESHOLD",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "INVALID_LIQUIDATOR",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -168,11 +207,35 @@ export interface ErrorsInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "LIQUIDATION_NOT_ALLOWED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "MULTIPLE_DEBTS_NOT_ALLOWED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "NOT_INITIALIZED",
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "NOT_THE_DESIGNATED_COLLATERAL",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "NO_DEBT_POSITION",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "ONLY_EMERGENCY_ADMIN",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "ONLY_POOL_ADMIN",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "ONLY_POOL_CONFIGURATOR",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -184,11 +247,31 @@ export interface ErrorsInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "ORACLE_PRICE_ZERO",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "PRICE_NOT_SET",
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "PROTOCOL_ALREADY_PAUSED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "PROTOCOL_NOT_PAUSED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "PROTOCOL_PAUSED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "REPAY_AMOUNT_EXCEEDS_DEBT",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "REPAY_AMOUNT_TOO_LOW",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -200,11 +283,19 @@ export interface ErrorsInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "SUPPLY_CAP_EXCEEDED",
+    functionFragment: "RESERVE_NOT_INITIALIZED",
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "UNAUTHORIZED_ACCESS",
+    functionFragment: "SINGLE_COLLATERAL_ONLY",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "SUPPLY_AMOUNT_TOO_LOW",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "SUPPLY_CAP_EXCEEDED",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -213,6 +304,10 @@ export interface ErrorsInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "USER_POSITION_NOT_INITIALIZED",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "WITHDRAW_AMOUNT_TOO_LOW",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -237,6 +332,10 @@ export interface ErrorsInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "BORROW_AMOUNT_TOO_LOW",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "BORROW_CAP_EXCEEDED",
     data: BytesLike
   ): Result;
@@ -261,6 +360,10 @@ export interface ErrorsInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "INVALID_ASSET_DECIMALS",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "INVALID_BASE_RATE",
     data: BytesLike
   ): Result;
@@ -269,7 +372,15 @@ export interface ErrorsInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "INVALID_COLLATERAL",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "INVALID_COLLATERAL_FACTOR",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "INVALID_DEBT_REPAYMENT",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -294,6 +405,10 @@ export interface ErrorsInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "INVALID_LIQUIDATION_THRESHOLD",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "INVALID_LIQUIDATOR",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -325,11 +440,35 @@ export interface ErrorsInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "LIQUIDATION_NOT_ALLOWED",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "MULTIPLE_DEBTS_NOT_ALLOWED",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "NOT_INITIALIZED",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "NOT_THE_DESIGNATED_COLLATERAL",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "NO_DEBT_POSITION",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "ONLY_EMERGENCY_ADMIN",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "ONLY_POOL_ADMIN",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "ONLY_POOL_CONFIGURATOR",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -341,11 +480,31 @@ export interface ErrorsInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "ORACLE_PRICE_ZERO",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "PRICE_NOT_SET",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "PROTOCOL_ALREADY_PAUSED",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "PROTOCOL_NOT_PAUSED",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "PROTOCOL_PAUSED",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "REPAY_AMOUNT_EXCEEDS_DEBT",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "REPAY_AMOUNT_TOO_LOW",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -357,11 +516,19 @@ export interface ErrorsInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "SUPPLY_CAP_EXCEEDED",
+    functionFragment: "RESERVE_NOT_INITIALIZED",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "UNAUTHORIZED_ACCESS",
+    functionFragment: "SINGLE_COLLATERAL_ONLY",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "SUPPLY_AMOUNT_TOO_LOW",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "SUPPLY_CAP_EXCEEDED",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -370,6 +537,10 @@ export interface ErrorsInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "USER_POSITION_NOT_INITIALIZED",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "WITHDRAW_AMOUNT_TOO_LOW",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -429,6 +600,8 @@ export interface Errors extends BaseContract {
 
   BORROWING_NOT_ENABLED: TypedContractMethod<[], [string], "view">;
 
+  BORROW_AMOUNT_TOO_LOW: TypedContractMethod<[], [string], "view">;
+
   BORROW_CAP_EXCEEDED: TypedContractMethod<[], [string], "view">;
 
   DEBT_AMOUNT_EXCEEDS_BALANCE: TypedContractMethod<[], [string], "view">;
@@ -441,11 +614,17 @@ export interface Errors extends BaseContract {
 
   INVALID_ASSET: TypedContractMethod<[], [string], "view">;
 
+  INVALID_ASSET_DECIMALS: TypedContractMethod<[], [string], "view">;
+
   INVALID_BASE_RATE: TypedContractMethod<[], [string], "view">;
 
   INVALID_CLOSE_FACTOR: TypedContractMethod<[], [string], "view">;
 
+  INVALID_COLLATERAL: TypedContractMethod<[], [string], "view">;
+
   INVALID_COLLATERAL_FACTOR: TypedContractMethod<[], [string], "view">;
+
+  INVALID_DEBT_REPAYMENT: TypedContractMethod<[], [string], "view">;
 
   INVALID_INPUT_PROOF: TypedContractMethod<[], [string], "view">;
 
@@ -458,6 +637,8 @@ export interface Errors extends BaseContract {
   INVALID_LIQUIDATION_BONUS: TypedContractMethod<[], [string], "view">;
 
   INVALID_LIQUIDATION_THRESHOLD: TypedContractMethod<[], [string], "view">;
+
+  INVALID_LIQUIDATOR: TypedContractMethod<[], [string], "view">;
 
   INVALID_MULTIPLIER: TypedContractMethod<[], [string], "view">;
 
@@ -473,29 +654,57 @@ export interface Errors extends BaseContract {
 
   LIQUIDATION_AMOUNT_TOO_HIGH: TypedContractMethod<[], [string], "view">;
 
+  LIQUIDATION_NOT_ALLOWED: TypedContractMethod<[], [string], "view">;
+
+  MULTIPLE_DEBTS_NOT_ALLOWED: TypedContractMethod<[], [string], "view">;
+
   NOT_INITIALIZED: TypedContractMethod<[], [string], "view">;
 
+  NOT_THE_DESIGNATED_COLLATERAL: TypedContractMethod<[], [string], "view">;
+
+  NO_DEBT_POSITION: TypedContractMethod<[], [string], "view">;
+
+  ONLY_EMERGENCY_ADMIN: TypedContractMethod<[], [string], "view">;
+
   ONLY_POOL_ADMIN: TypedContractMethod<[], [string], "view">;
+
+  ONLY_POOL_CONFIGURATOR: TypedContractMethod<[], [string], "view">;
 
   ONLY_PRICE_FEED: TypedContractMethod<[], [string], "view">;
 
   ORACLE_NOT_SET: TypedContractMethod<[], [string], "view">;
 
+  ORACLE_PRICE_ZERO: TypedContractMethod<[], [string], "view">;
+
   PRICE_NOT_SET: TypedContractMethod<[], [string], "view">;
 
+  PROTOCOL_ALREADY_PAUSED: TypedContractMethod<[], [string], "view">;
+
+  PROTOCOL_NOT_PAUSED: TypedContractMethod<[], [string], "view">;
+
   PROTOCOL_PAUSED: TypedContractMethod<[], [string], "view">;
+
+  REPAY_AMOUNT_EXCEEDS_DEBT: TypedContractMethod<[], [string], "view">;
+
+  REPAY_AMOUNT_TOO_LOW: TypedContractMethod<[], [string], "view">;
 
   RESERVE_ALREADY_INITIALIZED: TypedContractMethod<[], [string], "view">;
 
   RESERVE_NOT_ACTIVE: TypedContractMethod<[], [string], "view">;
 
-  SUPPLY_CAP_EXCEEDED: TypedContractMethod<[], [string], "view">;
+  RESERVE_NOT_INITIALIZED: TypedContractMethod<[], [string], "view">;
 
-  UNAUTHORIZED_ACCESS: TypedContractMethod<[], [string], "view">;
+  SINGLE_COLLATERAL_ONLY: TypedContractMethod<[], [string], "view">;
+
+  SUPPLY_AMOUNT_TOO_LOW: TypedContractMethod<[], [string], "view">;
+
+  SUPPLY_CAP_EXCEEDED: TypedContractMethod<[], [string], "view">;
 
   USER_POSITION_ALREADY_INITIALIZED: TypedContractMethod<[], [string], "view">;
 
   USER_POSITION_NOT_INITIALIZED: TypedContractMethod<[], [string], "view">;
+
+  WITHDRAW_AMOUNT_TOO_LOW: TypedContractMethod<[], [string], "view">;
 
   ZERO_ADDRESS: TypedContractMethod<[], [string], "view">;
 
@@ -516,6 +725,9 @@ export interface Errors extends BaseContract {
     nameOrSignature: "BORROWING_NOT_ENABLED"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "BORROW_AMOUNT_TOO_LOW"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "BORROW_CAP_EXCEEDED"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -534,13 +746,22 @@ export interface Errors extends BaseContract {
     nameOrSignature: "INVALID_ASSET"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "INVALID_ASSET_DECIMALS"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "INVALID_BASE_RATE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "INVALID_CLOSE_FACTOR"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "INVALID_COLLATERAL"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "INVALID_COLLATERAL_FACTOR"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "INVALID_DEBT_REPAYMENT"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "INVALID_INPUT_PROOF"
@@ -559,6 +780,9 @@ export interface Errors extends BaseContract {
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "INVALID_LIQUIDATION_THRESHOLD"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "INVALID_LIQUIDATOR"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "INVALID_MULTIPLIER"
@@ -582,10 +806,28 @@ export interface Errors extends BaseContract {
     nameOrSignature: "LIQUIDATION_AMOUNT_TOO_HIGH"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "LIQUIDATION_NOT_ALLOWED"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "MULTIPLE_DEBTS_NOT_ALLOWED"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "NOT_INITIALIZED"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "NOT_THE_DESIGNATED_COLLATERAL"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "NO_DEBT_POSITION"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "ONLY_EMERGENCY_ADMIN"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "ONLY_POOL_ADMIN"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "ONLY_POOL_CONFIGURATOR"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "ONLY_PRICE_FEED"
@@ -594,10 +836,25 @@ export interface Errors extends BaseContract {
     nameOrSignature: "ORACLE_NOT_SET"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "ORACLE_PRICE_ZERO"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "PRICE_NOT_SET"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "PROTOCOL_ALREADY_PAUSED"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "PROTOCOL_NOT_PAUSED"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "PROTOCOL_PAUSED"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "REPAY_AMOUNT_EXCEEDS_DEBT"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "REPAY_AMOUNT_TOO_LOW"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "RESERVE_ALREADY_INITIALIZED"
@@ -606,16 +863,25 @@ export interface Errors extends BaseContract {
     nameOrSignature: "RESERVE_NOT_ACTIVE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "SUPPLY_CAP_EXCEEDED"
+    nameOrSignature: "RESERVE_NOT_INITIALIZED"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "UNAUTHORIZED_ACCESS"
+    nameOrSignature: "SINGLE_COLLATERAL_ONLY"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "SUPPLY_AMOUNT_TOO_LOW"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "SUPPLY_CAP_EXCEEDED"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "USER_POSITION_ALREADY_INITIALIZED"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "USER_POSITION_NOT_INITIALIZED"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "WITHDRAW_AMOUNT_TOO_LOW"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "ZERO_ADDRESS"

@@ -145,34 +145,14 @@ const _abi = [
       {
         components: [
           {
-            internalType: "euint128",
-            name: "totalBorrowPowerUSD",
-            type: "bytes32",
-          },
-          {
-            internalType: "euint128",
-            name: "totalDebtUSD",
-            type: "bytes32",
-          },
-          {
-            internalType: "euint128",
-            name: "totalSuppliedUSD",
-            type: "bytes32",
-          },
-          {
-            internalType: "address[]",
-            name: "collateralAssets",
-            type: "address[]",
-          },
-          {
-            internalType: "address[]",
-            name: "borrowedAssets",
-            type: "address[]",
-          },
-          {
             internalType: "bool",
             name: "initialized",
             type: "bool",
+          },
+          {
+            internalType: "address",
+            name: "currentDebtAsset",
+            type: "address",
           },
         ],
         internalType: "struct Types.ConfidentialUserPosition",

@@ -70,17 +70,4 @@ contract ConfidentialUSDC is ConfidentialFungibleToken, Ownable, SepoliaConfig, 
         return 1;
     }
 
-    /// @notice Override decimals to match USDC (6 decimals)
-    /// @dev OpenZeppelin's ConfidentialFungibleToken defaults to 6, same as USDC
-    function decimals() public pure override returns (uint8) {
-        return 6;
-    }
-
-    /// @notice Get token metadata
-    /// @return name The token name
-    /// @return symbol The token symbol
-    /// @return decimals The token decimals (6, same as USDC)
-    function getTokenInfo() external pure returns (string memory name, string memory symbol, uint8 decimals) {
-        return ("Confidential USD Coin", "cUSDC", 6);
-    }
 }

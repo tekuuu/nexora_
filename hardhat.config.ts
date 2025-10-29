@@ -16,6 +16,7 @@ import "solidity-coverage";
 
 const PRIVATE_KEY: string = process.env.PRIVATE_KEY ?? "0x0000000000000000000000000000000000000000000000000000000000000000";
 const INFURA_API_KEY: string = process.env.INFURA_API_KEY ?? "";
+const ALCHEMY_SEPOLIA_URL = process.env.ALCHEMY_SEPOLIA_URL || "";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
