@@ -118,7 +118,6 @@ const UserBorrowsSection: React.FC<UserBorrowsSectionProps> = ({
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography variant="h6" sx={{ mb: 1, color: isDarkMode ? 'white' : '#000000' }}>Enable collateral to borrow</Typography>
-        <Typography variant="body2" sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)', mb: 2 }}>Supply assets and enable them as collateral to start borrowing</Typography>
         <Button variant="contained" onClick={() => onNavigateToMarkets ? onNavigateToMarkets() : undefined}>Go to Markets</Button>
       </Box>
     );
@@ -165,7 +164,6 @@ const UserBorrowsSection: React.FC<UserBorrowsSectionProps> = ({
 
                 <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
                   <Typography sx={{ color: isDarkMode ? 'white' : '#000000' }}>{p.isDecrypted ? p.formattedBorrowed : '••••••••'}</Typography>
-                  <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)' }}>{p.isDecrypted ? 'Decrypted' : 'Encrypted'}</Typography>
                 </TableCell>
 
                 <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
@@ -182,7 +180,7 @@ const UserBorrowsSection: React.FC<UserBorrowsSectionProps> = ({
             
                 <TableCell align="center" sx={{ color: isDarkMode ? 'white' : '#000000' }}>
                   <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                    <Button variant="outlined" size="small" startIcon={<Send />} onClick={() => onRepayClick({ address: p.address, symbol: p.symbol, decimals: p.decimals, name: p.name, icon: p.icon, color: p.color, price: p.price })} aria-label={`Repay ${p.symbol}`} sx={{
+                    <Button variant="outlined" size="small"  onClick={() => onRepayClick({ address: p.address, symbol: p.symbol, decimals: p.decimals, name: p.name, icon: p.icon, color: p.color, price: p.price })} aria-label={`Repay ${p.symbol}`} sx={{
                       borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
                       color: isDarkMode ? 'white' : '#000000',
                       '&:hover': {
@@ -238,11 +236,12 @@ const UserBorrowsSection: React.FC<UserBorrowsSectionProps> = ({
               </Grid>
 
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button fullWidth variant="contained" onClick={() => onRepayClick({ address: p.address, symbol: p.symbol, decimals: p.decimals, name: p.name, icon: p.icon, color: p.color, price: p.price })} startIcon={<Send />} sx={{
-                  backgroundColor: isDarkMode ? '#2196f3' : '#1976d2',
-                  color: 'white',
+                <Button fullWidth variant="outlined" onClick={() => onRepayClick({ address: p.address, symbol: p.symbol, decimals: p.decimals, name: p.name, icon: p.icon, color: p.color, price: p.price })}  sx={{
+                  borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                  color: isDarkMode ? 'white' : '#000000',
                   '&:hover': {
-                    backgroundColor: isDarkMode ? '#1976d2' : '#1565c0',
+                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
                   }
                 }}>
                   Repay
