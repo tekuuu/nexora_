@@ -1,0 +1,105 @@
+import "@fhevm/hardhat-plugin";
+import "@nomicfoundation/hardhat-chai-matchers";
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-verify";
+import "@typechain/hardhat";
+import "hardhat-deploy";
+import "hardhat-gas-reporter";
+import type { HardhatUserConfig } from "hardhat/config";
+import "dotenv/config";
+import "solidity-coverage";
+
+//import "./tasks/accounts";  // this will be repalced with the code you write
+//import "./tasks/FHECounter"; //this will be repalce with the code you write
+
+// Run 'npx hardhat vars setup' to see the list of variables that need to be set
+
+const PRIVATE_KEY: string = process.env.PRIVATE_KEY ?? "0x0000000000000000000000000000000000000000000000000000000000000000";
+const INFURA_API_KEY: string = process.env.INFURA_API_KEY ?? "";
+
+const config: HardhatUserConfig = {
+  defaultNetwork: "hardhat",
+  namedAccounts: {
+    deployer: 0,
+  },
+  fhevm: {
+    network: "sepolia",
+  },
+  etherscan: {
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
+    },
+  },
+  gasReporter: {
+    currency: "USD",
+    enabled: process.env.REPORT_GAS ? true : false,
+    excludeContracts: [],
+  },
+  networks: {
+    hardhat: {
+      chainId: 31337,
+    },
+    localhost: {
+      url: "http://localhost:8545",
+      chainId: 31337,
+      accounts: [PRIVATE_KEY],
+    },
+    anvil: {
+      accounts: [PRIVATE_KEY],
+      chainId: 31337,
+      url: "http://localhost:8545",
+    },
+    sepolia: {
+      accounts: [PRIVATE_KEY],
+      chainId: 11155111,
+      url: INFURA_API_KEY ? `https://sepolia.infura.io/v3/${INFURA_API_KEY}` : "https://rpc.sepolia.org",
+      timeout: 1200000,  // Increased to 3 minutes
+      gasPrice: "auto",
+      gas: "auto",
+    },
+  },
+  paths: {
+    artifacts: "./artifacts",
+    cache: "./cache",
+    sources: "./contracts",
+    tests: "./test",
+  },
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.24",
+        settings: {
+          metadata: {
+            bytecodeHash: "none",
+          },
+          optimizer: {
+            enabled: true,
+            runs: 800,
+          },
+          evmVersion: "cancun",
+          viaIR: true
+        },
+      },
+      {
+        version: "0.8.27",
+        settings: {
+          metadata: {
+            bytecodeHash: "none",
+          },
+          optimizer: {
+            enabled: true,
+            runs: 800,
+          },
+          evmVersion: "cancun",
+          viaIR: true
+        },
+      },
+    ],
+  },
+  typechain: {
+    outDir: "types",
+    target: "ethers-v6",
+  },
+};
+
+export default config;

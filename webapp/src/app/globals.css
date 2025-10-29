@@ -1,0 +1,125 @@
+/* Global CSS for Nexora Application */
+
+/* Ensure sans-serif font is used globally */
+* {
+  font-family: sans-serif;
+}
+
+/* Reset default styles */
+html, body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+/* Ensure consistent font rendering */
+body {
+  font-family: sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography improvements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+p, span, div {
+  font-family: sans-serif;
+}
+
+/* Button and input improvements */
+button, input, textarea, select {
+  font-family: sans-serif;
+}
+
+/* Material-UI component font override */
+.MuiTypography-root {
+  font-family: sans-serif !important;
+}
+
+.MuiButton-root {
+  font-family: sans-serif !important;
+}
+
+.MuiTextField-root input {
+  font-family: sans-serif !important;
+}
+
+/* ConnectKit Button Custom Styling */
+.ck-button {
+  background: linear-gradient(135deg,#e6ded4de 0%, #e6ded4de  0%) !important;
+  border: 1px solid rgba(52, 152, 219, 0.3) !important;
+  border-radius: 0px;/* Square shape */
+  color: white !important;
+  font-weight: 600 !important;
+  font-size: 0.75rem !important;
+  padding: 8px 16px !important;
+  height: 34px !important;
+  text-transform: none !important;
+  box-shadow: 0 4px 14px rgba(52, 152, 219, 0.3) !important;
+  transition: all 0.3s ease !important;
+}
+
+.ck-button:hover {
+  background: linear-gradient(135deg, #2980b9 0%, #e6ded4de 0%) !important;
+  border-color: rgba(52, 152, 219, 0.5) !important;
+  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4) !important;
+  transform: translateY(-1px) !important;
+}
+
+.ck-button:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3) !important;
+}
+
+/* ConnectKit modal backdrop customization */
+.ck-backdrop {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ConnectKit modal panel customization */
+.ck-modal-panel {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 0%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ConnectKit wallet button styling */
+.ck-wallet-button {
+  background: linear-gradient(135deg, #34495e 0%, #2c3e50 0%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0px !important;
+  color: white !important;
+  transition: all 0.3s ease !important;
+}
+
+.ck-wallet-button:hover {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ConnectKit connected button styling */
+.ck-connected-button {
+  background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%) !important;
+  border: 1px solid rgba(39, 174, 96, 0.3) !important;
+  border-radius: 0px !important;
+  color: white !important;
+  box-shadow: 0 4px 14px rgba(39, 174, 96, 0.3) !important;
+}
+
+.ck-connected-button:hover {
+  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%) !important;
+  border-color: rgba(39, 174, 96, 0.5) !important;
+  box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4) !important;
+}
