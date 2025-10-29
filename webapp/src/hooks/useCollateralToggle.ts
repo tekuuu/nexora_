@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from 'wagmi';
+import { waitForTransactionReceipt, readContract } from '@wagmi/core';
 import { getSafeContractAddresses } from '../config/contractConfig';
 
 const POOL_ABI = [
@@ -171,10 +172,12 @@ export default function useCollateralToggle() {
   const { address: userAddress } = useAccount();
   const CONTRACTS = getSafeContractAddresses();
   const poolAddress = CONTRACTS?.POOL_ADDRESS as `0x${string}` | undefined;
+  const config = useConfig();
 
   const {
     data: hash,
     writeContract,
+    writeContractAsync,
     isPending: isWritePending,
     error: writeError,
   } = useWriteContract();
@@ -201,21 +204,6 @@ export default function useCollateralToggle() {
     }
   }, [confirmError]);
 
-  // Emit an event for listeners (e.g., Dashboard) after success
-  useEffect(() => {
-    if (isSuccess && hash) {
-      try {
-        window.dispatchEvent(
-          new CustomEvent('collateralToggled', {
-            detail: { txHash: hash, timestamp: Date.now() },
-          })
-        );
-      } catch {
-        // ignore SSR
-      }
-    }
-  }, [isSuccess, hash]);
-
   const toggleCollateral = async (
     asset: { address: string; symbol?: string },
     enabled: boolean
@@ -237,13 +225,50 @@ export default function useCollateralToggle() {
     }
 
     setError(null);
+    console.log(`🔄 Starting collateral toggle for ${asset.symbol || asset.address}: ${enabled}`);
 
-    writeContract({
+    const txHash = await writeContractAsync({
       address: poolAddress,
       abi: POOL_ABI,
       functionName: 'setUserUseReserveAsCollateral',
       args: [asset.address as `0x${string}`, enabled],
     });
+
+    console.log('📤 Transaction submitted, awaiting confirmation:', txHash);
+    await waitForTransactionReceipt(config, { hash: txHash });
+    console.log('✅ Transaction confirmed successfully');
+
+    try {
+      let onchainEnabled: boolean | undefined = undefined;
+      try {
+        const res = await readContract(config, {
+          address: poolAddress as `0x${string}`,
+          abi: POOL_ABI,
+          functionName: 'userCollateralEnabled',
+          args: [userAddress as `0x${string}`, asset.address as `0x${string}`],
+          blockTag: 'latest',
+        });
+        onchainEnabled = Boolean(res);
+        console.log('🔎 On-chain collateral status after tx:', asset.symbol || asset.address, onchainEnabled);
+      } catch (readErr) {
+        console.warn('⚠️ Could not read on-chain collateral status:', readErr);
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('collateralToggled', {
+          detail: {
+            txHash,
+            timestamp: Date.now(),
+            assetSymbol: asset.symbol,
+            assetAddress: asset.address,
+            requestedEnabled: enabled,
+            onchainEnabled,
+          },
+        })
+      );
+    } catch {
+      // ignore SSR
+    }
   };
 
   return {

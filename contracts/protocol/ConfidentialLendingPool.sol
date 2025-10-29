@@ -163,7 +163,7 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         params.withdrawAmount = FHE.fromExternal(amountE6, inputProof);
 
         if (asset == cethAddress && userCollateralEnabled[msg.sender][cethAddress]) {
-            _executeWithdrawCollateral_V0plus(params);
+            _executeWithdrawCollateral(params);
         } else {
             ebool IsSafe = params.withdrawAmount.le(params.userBalance);
             euint64 safeWithdrawAmountE6 = FHE.select(IsSafe, params.withdrawAmount, FHE.asEuint64(0));
@@ -171,30 +171,18 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         }
     }
 
-    function _executeWithdrawCollateral_V0plus(Types.WithdrawParams memory params) internal {
-         Types.ConfidentialUserPosition storage up = _userPositions[params.user];
-         euint64 withdrawAmount_cWETH_E6 = params.withdrawAmount;
-         euint64 currentSupplied_cWETH_E6 = params.userBalance;
-
-         euint64 totalDebtUSD_E6 = _getAccountDebtUSD_V0plus(params.user);
-
-         Types.ConfidentialReserve storage collateralReserve = reserves[cethAddress];
+    function _executeWithdrawCollateral(Types.WithdrawParams memory params) internal {
+         euint64 withdrawAmount_cWETH = params.withdrawAmount;
+         euint64 currentSupplied_cWETH = params.userBalance;
+         euint64 totalDebtUSD_E6 = _getAccountDebtUSD(params.user);
          uint64 collateralPriceE6 = uint64(priceOracle.getPrice(cethAddress));
-         uint64 collateralFactor = collateralReserve.collateralFactor;
 
-         require(collateralPriceE6 > 0, Errors.ORACLE_PRICE_ZERO);
+         require(collateralPriceE6 > 0, "ORACLE_PRICE_ZERO");
 
-         euint64 margin_cWETH_E6 = currentSupplied_cWETH_E6.safeSub(withdrawAmount_cWETH_E6);
+         euint64 margin_cWETH_E6 = currentSupplied_cWETH.safeSub(withdrawAmount_cWETH);
          euint64 marginUSD_E6 = AssetUtils64.getUsdValue64(margin_cWETH_E6, collateralPriceE6);
-
-         uint64 percentPrecision = Constants.PERCENT_PRECISION;
-         euint64 marginBorrowPowerUSD_E6 = FHE.div(
-             FHE.mul(marginUSD_E6, collateralFactor),
-             percentPrecision
-         );
-
-         ebool isValid = FHE.le(totalDebtUSD_E6, marginBorrowPowerUSD_E6);
-         euint64 safeWithdrawAmountE6 = FHE.select(isValid, withdrawAmount_cWETH_E6, FHE.asEuint64(0));
+         ebool isValid = FHE.le(totalDebtUSD_E6, marginUSD_E6);
+         euint64 safeWithdrawAmountE6 = FHE.select(isValid, withdrawAmount_cWETH, FHE.asEuint64(0));
 
          _finalizeWithdrawal(params, safeWithdrawAmountE6);
     }
@@ -223,7 +211,7 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
             revert (Errors.MULTIPLE_DEBTS_NOT_ALLOWED);
         }
 
-        euint64 borrowingPowerUSD_E6 = _getAccountBorrowPowerUSD_V0plus(msg.sender);
+        euint64 borrowingPowerUSD = _getAccountBorrowPowerUSD(msg.sender);
 
         Types.ConfidentialReserve storage borrowReserve = reserves[asset];
         uint64 borrowPriceE6 = uint64(priceOracle.getPrice(asset));
@@ -237,10 +225,10 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
              currentDebtUSD_E6 = AssetUtils64.getUsdValue64(currentDebtBalanceE6, borrowPriceE6);
         }
 
-        euint64 requestedAmountUSD_E6 = AssetUtils64.getUsdValue64(requestedAmountE6, borrowPriceE6);
-        euint64 newTotalDebtUSD_E6 = currentDebtUSD_E6.safeAdd(requestedAmountUSD_E6);
+        euint64 requestedAmountUSD = AssetUtils64.getUsdValue64(requestedAmountE6, borrowPriceE6);
+        euint64 newTotalDebtUSD = currentDebtUSD_E6.safeAdd(requestedAmountUSD);
 
-        ebool isValid = FHE.le(newTotalDebtUSD_E6, borrowingPowerUSD_E6);
+        ebool isValid = FHE.le(newTotalDebtUSD, borrowingPowerUSD);
         euint64 maxSafeBorrowE6 = FHE.select(isValid, requestedAmountE6, FHE.asEuint64(0));
 
 
@@ -397,26 +385,22 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
 
    // ========== INTERNAL HEALTH CALCULATION (Refactored for V0+ 6-decimal euint64) ==========
 
-   function _getAccountBorrowPowerUSD_V0plus(address user)
+   function _getAccountBorrowPowerUSD(address user)
         internal
-        returns (euint64 borrowPowerUSD_E6)
+        returns (euint64 borrowPowerUSD)
     {
-        borrowPowerUSD_E6 = FHE.asEuint64(0);
+        borrowPowerUSD = FHE.asEuint64(0);          
         if (userCollateralEnabled[user][cethAddress]) {
             Types.ConfidentialReserve storage r = reserves[cethAddress];
             uint64 priceE6 = uint64(priceOracle.getPrice(cethAddress));
             if (r.active && r.isCollateral && priceE6 > 0) {
                 euint64 balanceE6 = _userSuppliedBalances[user][cethAddress];
-                euint64 valueUSD_E6 = AssetUtils64.getUsdValue64(balanceE6, priceE6);
-                borrowPowerUSD_E6 = FHE.div(
-                    FHE.mul(valueUSD_E6, r.collateralFactor),
-                    Constants.PERCENT_PRECISION
-                );
+                borrowPowerUSD = AssetUtils64.getUsdValue64(balanceE6, priceE6);
             }
         }
     }
 
-   function _getAccountDebtUSD_V0plus(address user)
+   function _getAccountDebtUSD(address user)
         internal
         returns (euint64 totalDebtUSD_E6)
     {

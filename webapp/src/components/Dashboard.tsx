@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useAccount, useBalance, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useReadContract, useConfig } from 'wagmi';
+import { useAccount, useBalance, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useReadContract, useReadContracts, useConfig } from 'wagmi';
 import { useQueryClient } from '@tanstack/react-query';
 import isEqual from 'fast-deep-equal';
 import { ConnectKitButton } from 'connectkit';
@@ -452,8 +452,23 @@ export default function Dashboard(): JSX.Element {
   useEffect(() => {
     const onToggled = (event: any) => {
       console.log('🎯 Collateral toggled event received:', event.detail);
-      // Immediately trigger a refresh instead of waiting for debounce
-      setCollateralRefreshTrigger(c => c + 1);
+      const d = (event && event.detail) || {};
+      // If the hook provided the on-chain value, immediately reflect it in UI state
+      if (typeof d.onchainEnabled === 'boolean') {
+        setUserCollateralEnabledBySymbol(prev => {
+          const next = { ...prev };
+          if (d.assetSymbol) next[d.assetSymbol] = d.onchainEnabled;
+          if (d.assetAddress) {
+            const key = typeof d.assetAddress === 'string' ? d.assetAddress.toLowerCase() : d.assetAddress;
+            next[key] = d.onchainEnabled;
+          }
+          return next;
+        });
+      }
+      // Also trigger a quick revalidation against chain
+      setTimeout(() => {
+        setCollateralRefreshTrigger(c => c + 1);
+      }, 200);
     };
     window.addEventListener('collateralToggled', onToggled as EventListener);
     return () => window.removeEventListener('collateralToggled', onToggled as EventListener);
@@ -531,6 +546,45 @@ export default function Dashboard(): JSX.Element {
     args: address ? [address] : undefined,
     query: { enabled: !!address, refetchInterval: false } // DISABLED to prevent 429 errors
   });
+
+  // Contract addresses
+  // Get contract addresses with validation
+  const contractAddresses = getSafeContractAddresses();
+  const poolAddr = (contractAddresses?.POOL_ADDRESS as `0x${string}`) || (CONTRACTS.LENDING_POOL as `0x${string}`);
+
+
+  // ABI for POOL
+  const POOL_ABI = [
+    {
+      "inputs": [
+        { "internalType": "address", "name": "", "type": "address" },
+        { "internalType": "address", "name": "", "type": "address" }
+      ],
+      "name": "userCollateralEnabled",
+      "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ] as const;
+
+  // Dynamic reserves - fetches all active reserves from on-chain
+  const { supplyAssets, borrowAssets, collateralAssets, isLoading: isLoadingReserves } = useAvailableReserves();
+
+  // Fetch collateral state using wagmi hook for better caching and reliability
+  const { data: collateralData, isLoading: isLoadingCollateralHook, refetch: refetchCollateral } = useReadContracts({
+    contracts: supplyAssets.map(asset => ({
+      address: poolAddr,
+      abi: POOL_ABI,
+      functionName: 'userCollateralEnabled',
+      args: [address, asset.address],
+    })),
+    query: {
+      enabled: !!address && !!poolAddr && supplyAssets.length > 0,
+      staleTime: 0,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+    },
+  });
   
   const cwethBalance = useConfidentialTokenBalance(
     { address: CONTRACTS.CONFIDENTIAL_WETH, symbol: 'WETH', decimals: 6 },
@@ -548,13 +602,12 @@ export default function Dashboard(): JSX.Element {
     getMasterSignature
   );
 
-  // Dynamic reserves - fetches all active reserves from on-chain
-  const { supplyAssets, borrowAssets, collateralAssets, isLoading: isLoadingReserves } = useAvailableReserves();
 
   // Per-asset user collateral status: populate a symbol -> boolean map using direct RPC reads.
   // IMPORTANT: we must NOT call React hooks inside loops. Instead perform safe contract reads
   // inside a useEffect and store the results in component state.
   const [userCollateralEnabledBySymbol, setUserCollateralEnabledBySymbol] = useState<Record<string, boolean>>({});
+  const [isLoadingCollateral, setIsLoadingCollateral] = useState<boolean>(true);
 
   // Refs to prevent concurrent fetchFlags calls, manage debounce timeout, and check dependency changes
   const isFetchingRef = useRef(false);
@@ -569,40 +622,32 @@ export default function Dashboard(): JSX.Element {
     prevDepsRef.current = currentDeps;
 
     let mounted = true;
-    const safeContracts = getSafeContractAddresses();
-    const POOL_ABI = [
-      {
-        "inputs": [
-          { "internalType": "address", "name": "", "type": "address" },
-          { "internalType": "address", "name": "", "type": "address" }
-        ],
-        "name": "userCollateralEnabled",
-        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-        "stateMutability": "view",
-        "type": "function"
-      }
-    ] as const;
 
     const fetchFlags = async () => {
       if (!mounted) return;
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
+      setIsLoadingCollateral(true);
 
       if (!address || !supplyAssets || supplyAssets.length === 0) {
         if (mounted) setUserCollateralEnabledBySymbol({});
+        setIsLoadingCollateral(false);
         isFetchingRef.current = false;
         return;
       }
 
-      const poolAddr = (safeContracts?.POOL_ADDRESS as `0x${string}`) || (CONTRACTS.LENDING_POOL as `0x${string}`);
       if (!poolAddr) {
         // No pool address available; default to empty map
         if (mounted) setUserCollateralEnabledBySymbol({});
+        setIsLoadingCollateral(false);
         isFetchingRef.current = false;
         return;
       }
 
       try {
+        // Wait a bit for blockchain state to update
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         const entries = await Promise.all(supplyAssets.map(async (asset) => {
           try {
             const res = await readContract(config, {
@@ -610,11 +655,14 @@ export default function Dashboard(): JSX.Element {
               abi: POOL_ABI,
               functionName: 'userCollateralEnabled',
               args: [address as `0x${string}`, asset.address as `0x${string}`],
+              blockTag: 'latest',
             });
-            return [asset.symbol, Boolean(res)] as const;
+            const enabled = Boolean(res);
+            console.log('🔍 Collateral status for', asset.symbol, ':', enabled);
+            return [asset.symbol, asset.address.toLowerCase(), enabled] as const;
           } catch (err) {
             // On error, default to false for safety
-            return [asset.symbol, false] as const;
+            return [asset.symbol, asset.address.toLowerCase(), false] as const;
           }
         }));
 
@@ -623,13 +671,18 @@ export default function Dashboard(): JSX.Element {
           return;
         }
         const map: Record<string, boolean> = {};
-        entries.forEach(([sym, enabled]) => { map[sym] = enabled; });
-        console.log('🔄 Collateral state updated:', map);
+        entries.forEach(([sym, addr, enabled]) => {
+          map[sym] = enabled;
+          map[addr] = enabled;
+        });
+        console.log('🔄 Collateral state updated (symbol+address keys):', map);
+        console.log('🔄 Full collateral map:', JSON.stringify(map, null, 2));
         setUserCollateralEnabledBySymbol(map);
       } catch (err) {
         console.error('Failed to fetch user collateral flags:', err);
         if (mounted) setUserCollateralEnabledBySymbol({});
       } finally {
+        setIsLoadingCollateral(false);
         isFetchingRef.current = false;
       }
     };
@@ -641,7 +694,6 @@ export default function Dashboard(): JSX.Element {
 
     // Invalidate existing queries to ensure fresh data
     if (address && supplyAssets.length > 0) {
-      const poolAddr = (safeContracts?.POOL_ADDRESS as `0x${string}`) || (CONTRACTS.LENDING_POOL as `0x${string}`);
       if (poolAddr) {
         queryClient.invalidateQueries({ queryKey: ['readContract', poolAddr] });
       }
@@ -963,9 +1015,6 @@ export default function Dashboard(): JSX.Element {
     }
   }, [swapError, resetSwapWrite]);
 
-  // Contract addresses
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
   const CWETH_ADDRESS = contractAddresses?.CWETH_ADDRESS;
 
   // Available tokens for swap
@@ -2335,6 +2384,7 @@ export default function Dashboard(): JSX.Element {
                     onCollateralToggle={(asset, enabled) => toggleCollateral(asset, enabled)}
                     hasActiveBorrowsForSymbol={hasActiveBorrowsForSymbol}
                     isLoadingSupplied={isLoadingSupplied}
+                    isLoadingCollateral={isLoadingCollateral}
                     isDarkMode={isDarkMode}
                     onNavigateToMarkets={handleNavigateToMarkets}
                   />

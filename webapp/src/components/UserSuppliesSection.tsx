@@ -37,6 +37,7 @@ interface UserSuppliesSectionProps {
   onWithdrawClick: (asset: { address: string; symbol: string; decimals: number; name: string; icon: string; color: string }) => void;
   onCollateralToggle: (asset: { address: string; symbol: string }, enabled: boolean) => void | Promise<void>;
   isLoadingSupplied: boolean;
+  isLoadingCollateral: boolean;
   isDarkMode: boolean;
   onNavigateToMarkets?: () => void;
   // Optional callback to check whether a symbol has active borrows (used to require confirmation before disabling collateral)
@@ -68,16 +69,13 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
   onWithdrawClick,
   onCollateralToggle,
   isLoadingSupplied,
+  isLoadingCollateral,
   isDarkMode,
   onNavigateToMarkets,
   hasActiveBorrowsForSymbol,
 }) => {
   const theme = useTheme();
   const [collateralToggling, setCollateralToggling] = useState<Record<string, boolean>>({});
-  // Local optimistic state per-symbol to avoid flicker while parent updates arrive
-  const [optimisticCollateral, setOptimisticCollateral] = useState<Record<string, boolean>>({});
-  // Track when we last had a transaction for each symbol to prevent stale state overwrites
-  const [lastTransactionTime, setLastTransactionTime] = useState<Record<string, number>>({});
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmDialogAsset, setConfirmDialogAsset] = useState<{ address: string; symbol: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -113,11 +111,6 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
   }, [suppliedBalances, assets, userCollateralEnabled]);
 
   const handleToggle = useCallback(async (asset: { address: string; symbol: string }, enabled: boolean) => {
-    // Track when this transaction started
-    setLastTransactionTime(s => ({ ...s, [asset.symbol]: Date.now() }));
-
-    // Optimistically update UI immediately to prevent toggle flicker
-    setOptimisticCollateral(s => ({ ...s, [asset.symbol]: enabled }));
     try {
       setCollateralToggling(s => ({ ...s, [asset.symbol]: true }));
 
@@ -127,8 +120,6 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
       // success - parent is expected to refresh authoritative state
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : String(err);
-      // revert optimistic state on error
-      setOptimisticCollateral(s => ({ ...s, [asset.symbol]: !enabled }));
       if (!msg.toLowerCase().includes('cancel')) {
         setErrorMessage(msg);
       }
@@ -137,114 +128,7 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
     }
   }, [onCollateralToggle]);
 
-  // Initialize optimistic state with authoritative data when it becomes available
-  // This ensures the toggle shows the correct state on page load
-  useEffect(() => {
-    if (!userCollateralEnabled) return;
 
-    setOptimisticCollateral(prev => {
-      let changed = false;
-      const next = { ...prev };
-
-      for (const p of positions) {
-        if (Object.prototype.hasOwnProperty.call(userCollateralEnabled, p.symbol)) {
-          const authoritative = Boolean(userCollateralEnabled[p.symbol]);
-          // Initialize or update with authoritative state if we don't have local state
-          if (!(p.symbol in next) || !lastTransactionTime[p.symbol]) {
-            next[p.symbol] = authoritative;
-            changed = true;
-          }
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [userCollateralEnabled, positions]);
-
-  // Seed optimistic state for any symbols we don't yet know about. Don't overwrite keys that
-  // already exist to preserve user interactions in-flight.
-  useEffect(() => {
-    setOptimisticCollateral(prev => {
-      let changed = false;
-      const next = { ...prev };
-      for (const p of positions) {
-        if (!(p.symbol in next)) {
-          // Use authoritative state if available, otherwise fall back to asset default
-          const initialState = userCollateralEnabled && (p.symbol in userCollateralEnabled)
-            ? Boolean(userCollateralEnabled[p.symbol])
-            : p.isCollateralEnabled;
-          next[p.symbol] = initialState;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [positions, userCollateralEnabled]);
-
-  // Sync optimistic state to authoritative server flags when they arrive,
-  // so the toggle doesn't visually revert while the contract has the correct value.
-  useEffect(() => {
-    if (!userCollateralEnabled) return;
-    setOptimisticCollateral(prev => {
-      let changed = false;
-      const next = { ...prev };
-      const now = Date.now();
-      const RECENT_TRANSACTION_THRESHOLD = 10000; // 10 seconds
-
-      for (const p of positions) {
-        if (Object.prototype.hasOwnProperty.call(userCollateralEnabled, p.symbol)) {
-          // Do not overwrite while a toggle is in-flight for this symbol
-          if (collateralToggling[p.symbol]) continue;
-
-          const authoritative = Boolean(userCollateralEnabled[p.symbol]);
-          const currentOptimistic = next[p.symbol];
-          const lastTxTime = lastTransactionTime[p.symbol];
-
-          // Only update if:
-          // 1. The authoritative state is different from current optimistic state
-          // 2. AND either there's no recent transaction OR enough time has passed since the last transaction
-          if (currentOptimistic !== authoritative) {
-            // Check if there's been a recent transaction for this asset
-            const timeSinceLastTransaction = lastTxTime ? now - lastTxTime : Infinity;
-
-            if (timeSinceLastTransaction > RECENT_TRANSACTION_THRESHOLD) {
-              // No recent transaction or enough time has passed - safe to update
-              next[p.symbol] = authoritative;
-              changed = true;
-            } else {
-              // Recent transaction - be conservative and don't overwrite optimistic state
-              console.log(`🚫 Preventing overwrite of optimistic state for ${p.symbol}. Authoritative: ${authoritative}, Optimistic: ${currentOptimistic}, Time since tx: ${timeSinceLastTransaction}ms`);
-            }
-          }
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [userCollateralEnabled, positions, collateralToggling, assets, lastTransactionTime]);
-
-  // Additional effect to handle initial state loading and prop changes
-  useEffect(() => {
-    if (!userCollateralEnabled || positions.length === 0) return;
-
-    setOptimisticCollateral(prev => {
-      let changed = false;
-      const next = { ...prev };
-
-      for (const p of positions) {
-        if (Object.prototype.hasOwnProperty.call(userCollateralEnabled, p.symbol)) {
-          const authoritative = Boolean(userCollateralEnabled[p.symbol]);
-          const currentOptimistic = next[p.symbol];
-
-          // If we don't have local state for this asset, initialize it with authoritative state
-          if (currentOptimistic === undefined) {
-            next[p.symbol] = authoritative;
-            changed = true;
-            console.log(`🔄 Initializing ${p.symbol} collateral state: ${authoritative}`);
-          }
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [userCollateralEnabled, positions]);
 
   const requestToggle = (asset: { address: string; symbol: string }, enabled: boolean) => {
     // If disabling, only show confirmation when the user has active borrows for this asset
@@ -270,7 +154,7 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
     setConfirmDialogAsset(null);
   };
 
-  if (isLoadingSupplied) {
+  if (isLoadingSupplied || isLoadingCollateral) {
     return (
       <Box>
         {[1,2,3].map(i => (
@@ -369,21 +253,11 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
                     {p.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase() ? (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center' }}>
                         <Switch
-                          checked={
-                            collateralToggling[p.symbol]
-                              ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
-                              : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
-                                ? Boolean(userCollateralEnabled[p.symbol])
-                                : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
-                          }
+                          key={p.symbol + (userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false)}
+                          checked={Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false)}
                           onChange={() => {
-                            const effectiveCurrent =
-                              collateralToggling[p.symbol]
-                                ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
-                                : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
-                                  ? Boolean(userCollateralEnabled[p.symbol])
-                                  : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled);
-                            requestToggle({ address: p.address, symbol: p.symbol }, !effectiveCurrent);
+                            const current = Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false);
+                            requestToggle({ address: p.address, symbol: p.symbol }, !current);
                           }}
                           inputProps={{ 'aria-label': `Toggle collateral for ${p.symbol}` }}
                           disabled={Boolean(collateralToggling[p.symbol])}
@@ -478,21 +352,11 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
                   {p.address.toLowerCase() === CONTRACTS.CONFIDENTIAL_WETH.toLowerCase() ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Switch
-                        checked={
-                          collateralToggling[p.symbol]
-                            ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
-                            : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
-                              ? Boolean(userCollateralEnabled[p.symbol])
-                              : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
-                        }
+                        key={p.symbol + (userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false)}
+                        checked={Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false)}
                         onChange={() => {
-                          const effectiveCurrent =
-                            collateralToggling[p.symbol]
-                              ? Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled)
-                              : (userCollateralEnabled && (p.symbol in (userCollateralEnabled || {})))
-                                ? Boolean(userCollateralEnabled[p.symbol])
-                                : Boolean(optimisticCollateral[p.symbol] ?? p.isCollateralEnabled);
-                          requestToggle({ address: p.address, symbol: p.symbol }, !effectiveCurrent);
+                          const current = Boolean(userCollateralEnabled?.[p.address?.toLowerCase()] ?? userCollateralEnabled?.[p.symbol] ?? false);
+                          requestToggle({ address: p.address, symbol: p.symbol }, !current);
                         }}
                         disabled={Boolean(collateralToggling[p.symbol])}
                         inputProps={{ 'aria-label': `Toggle collateral for ${p.symbol}` }}
