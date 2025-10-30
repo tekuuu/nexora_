@@ -176,9 +176,12 @@ export function useReserveTotals(
   }, [supplyAssets, fetchEncryptedForToken]);
 
   const decryptTotals = useCallback(async (tokenSymbol: string) => {
-    if (!isConnected) {
-      console.log('Missing requirements to decrypt reserve totals:', {
+    if (!isConnected || !address || !walletClient || !masterSignature) {
+      console.log('Missing requirements for reserve totals decryption:', {
         isConnected,
+        address,
+        walletClient: !!walletClient,
+        masterSignature: !!masterSignature,
         poolAddress: CONTRACTS.LENDING_POOL
       });
       return;
@@ -203,49 +206,34 @@ export function useReserveTotals(
     try {
       const fhe = await getFHEInstance();
 
-      let res: Record<string, any> | null = null;
-
-      // Preferred path: publicDecrypt batch (no signature required)
-      try {
-        const handlesToDecrypt: `0x${string}`[] = [];
-        if (enc.supplied) handlesToDecrypt.push(enc.supplied);
-        if (enc.borrowed) handlesToDecrypt.push(enc.borrowed);
-
-        if (typeof (fhe as any).publicDecrypt === 'function' && handlesToDecrypt.length > 0) {
-          console.log(`🔓 publicDecrypt reserve totals for ${tokenSymbol} (batch=${handlesToDecrypt.length})`);
-          res = await (fhe as any).publicDecrypt(handlesToDecrypt);
-        }
-      } catch (pubErr) {
-        console.warn(`publicDecrypt failed for ${tokenSymbol}, will try userDecrypt fallback`, pubErr);
+      // Get master signature object
+      const masterSig = getMasterSignature();
+      if (!masterSig) {
+        throw new Error('Master signature not available');
       }
 
-      // Fallback path: userDecrypt with master signature (if available)
-      if (!res) {
-        const masterSig = getMasterSignature && getMasterSignature();
-        if (!masterSig) {
-          throw new Error('No publicDecrypt result and master signature not available');
-        }
+      // Use userDecrypt for reserve totals (same as private user data)
+      const handles: { handle: `0x${string}`; contractAddress: `0x${string}` }[] = [];
+      if (enc.supplied) handles.push({ handle: enc.supplied, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` });
+      if (enc.borrowed) handles.push({ handle: enc.borrowed, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` });
 
-        const handles: { handle: `0x${string}`; contractAddress: `0x${string}` }[] = [];
-        if (enc.supplied) handles.push({ handle: enc.supplied, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` });
-        if (enc.borrowed) handles.push({ handle: enc.borrowed, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` });
+      console.log(`🔓 Decrypting reserve totals for ${tokenSymbol}...`);
+      const res = await (fhe as any).userDecrypt(
+        handles,
+        masterSig.privateKey,
+        masterSig.publicKey,
+        masterSig.signature,
+        masterSig.contractAddresses,
+        masterSig.userAddress,
+        masterSig.startTimestamp,
+        masterSig.durationDays
+      );
 
-        res = await (fhe as any).userDecrypt(
-          handles,
-          masterSig.privateKey,
-          masterSig.publicKey,
-          masterSig.signature,
-          masterSig.contractAddresses,
-          masterSig.userAddress,
-          masterSig.startTimestamp,
-          masterSig.durationDays
-        );
-      }
       if (!res) {
         throw new Error(`Failed to decrypt reserve totals for ${tokenSymbol}: no decryption result`);
       }
 
-      // TypeScript knows res is not null from the above logic if(!res)
+      // Extract decrypted values
       const sVal = enc.supplied ? res[enc.supplied] : undefined;
       const bVal = enc.borrowed ? res[enc.borrowed] : undefined;
 
@@ -273,7 +261,7 @@ export function useReserveTotals(
         }
       }));
 
-      console.log(`✅ Decrypted totals for ${tokenSymbol}: S=${fmtSup} B=${fmtBor}`);
+      console.log(`✅ Reserve totals decrypted for ${tokenSymbol}: S=${fmtSup} B=${fmtBor}`);
     } catch (e) {
       console.error(`Failed to decrypt reserve totals for ${tokenSymbol}:`, e);
       // Final failure state
@@ -284,7 +272,7 @@ export function useReserveTotals(
     } finally {
       decryptingRefs.current[tokenSymbol] = false;
     }
-  }, [isConnected, encrypted, getMasterSignature, supplyAssets]);
+  }, [isConnected, address, walletClient, masterSignature, encrypted, getMasterSignature, supplyAssets]);
 
   useEffect(() => {
     decryptTotalsRef.current = decryptTotals;
@@ -370,6 +358,7 @@ export function useReserveTotals(
         return notAuto && needed;
       });
       if (symbols.length > 0) {
+        console.log(`🔄 Initial auto-decryption for reserve totals: ${symbols.join(', ')}`);
         // Mark to prevent re-scheduling
         symbols.forEach(s => { hasAutoDecryptedRef.current[s] = true; });
         const id = setTimeout(() => {
@@ -382,8 +371,61 @@ export function useReserveTotals(
     }
   }, [isLoading, isConnected, encrypted, totals, scheduleDecryptTotals]);
 
+  // Auto-decrypt when master signature becomes available (like other hooks)
+  useEffect(() => {
+    if (masterSignature && !isLoading && isConnected && Object.keys(encrypted).length > 0) {
+      const symbolsNeedingDecrypt: string[] = [];
+
+      Object.entries(encrypted).forEach(([symbol, enc]) => {
+        const hasEnc = !!enc && (enc.supplied || enc.borrowed);
+        const bal = totals[symbol];
+        const auto = hasAutoDecryptedRef.current[symbol];
+        const isDec = bal?.isDecrypted;
+        const inProg = decryptingRefs.current[symbol];
+
+        if (hasEnc && !auto && !inProg && !isDec) {
+          symbolsNeedingDecrypt.push(symbol);
+        }
+      });
+
+      if (symbolsNeedingDecrypt.length > 0) {
+        console.log(`🔄 Initial auto-decryption after master signature for reserve totals: ${symbolsNeedingDecrypt.join(', ')}`);
+
+        symbolsNeedingDecrypt.forEach(s => {
+          hasAutoDecryptedRef.current[s] = true;
+        });
+
+        const timeoutId = setTimeout(() => {
+          symbolsNeedingDecrypt.forEach(s => {
+            if (!decryptingRefs.current[s] && decryptTotalsRef.current) {
+              decryptTotalsRef.current(s);
+            }
+          });
+        }, 200);
+
+        return () => clearTimeout(timeoutId);
+      }
+    } else if (!masterSignature && Object.keys(totals).some(k => totals[k]?.isDecrypted)) {
+      console.log('🔒 Master signature lost - locking reserve totals');
+      hasAutoDecryptedRef.current = {};
+      setTotals(prev => {
+        const locked: Record<string, ReserveTotals> = {};
+        Object.entries(prev).forEach(([symbol, bal]) => {
+          locked[symbol] = {
+            ...bal,
+            formattedTotalSupplied: '••••••••',
+            formattedTotalBorrowed: '••••••••',
+            isDecrypted: false
+          };
+        });
+        return locked;
+      });
+    }
+  }, [masterSignature, encrypted, isLoading, isConnected, totals]);
+
   useEffect(() => {
     if (!isConnected) {
+      console.log('🔒 Master signature lost - locking reserve totals');
       setEncrypted({});
       setTotals({});
       decryptingRefs.current = {};

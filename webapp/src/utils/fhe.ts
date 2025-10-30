@@ -20,6 +20,7 @@ export interface FhevmInstance {
       inputProof: string;
     }>;
   };
+  publicDecrypt: (handles: (string | Uint8Array)[]) => Promise<Record<string, string | bigint | boolean>>;
   userDecrypt: (
     handles: Array<{ handle: string; contractAddress: string }>,
     privateKey: string,
@@ -215,6 +216,7 @@ export const getFHEInstance = async (provider?: any): Promise<FhevmInstance> => 
             };
           }
         }),
+        publicDecrypt: async () => ({}),
         userDecrypt: async () => ({})
       } as any;
       

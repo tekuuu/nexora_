@@ -3324,6 +3324,9 @@ export default function Dashboard(): JSX.Element {
             onTransactionSuccess={handleRepaySuccess}
             onClose={() => setShowRepayModal(false)}
             selectedAsset={selectedAsset}
+            borrowedBalance={borrowedBalances?.[selectedAsset?.symbol]?.formattedBorrowed}
+            hasBorrowed={borrowedBalances?.[selectedAsset?.symbol]?.hasBorrowed}
+            isDecrypted={borrowedBalances?.[selectedAsset?.symbol]?.isDecrypted}
           />
         </Box>
       )}

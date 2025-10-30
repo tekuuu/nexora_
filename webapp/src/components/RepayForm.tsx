@@ -441,7 +441,7 @@ export default function RepayForm({
           helperText={
             hasBorrowed
               ? borrowedBalance
-              : 'No borrowed balance available'
+              : 'No borrowed balance'
           }
           sx={{
             '& .MuiOutlinedInput-root': {

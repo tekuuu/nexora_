@@ -228,9 +228,7 @@ export default function BorrowForm({
       {/* Close Button */}
       <Button
         onClick={() => {
-          // Close the dialog by triggering a custom event or using parent component logic
-          const event = new CustomEvent('closeBorrowDialog');
-          window.dispatchEvent(event);
+          if (onClose) onClose();
         }}
         sx={{
           position: 'absolute',

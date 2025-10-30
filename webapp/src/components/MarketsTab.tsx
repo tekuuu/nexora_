@@ -36,10 +36,8 @@ export interface MarketsTabProps {
   borrowedBalances: Record<string, BorrowedBalance>;
   onSupplyClick: (asset: AvailableAsset) => void;
   onBorrowClick: (asset: AvailableAsset) => void;
-  onDecryptTotals: () => void;
   isDarkMode: boolean;
   isLoadingReserves: boolean;
-  isDecryptingTotals: boolean;
   // map from asset symbol to whether the user has enabled collateral for that asset
   userCollateralEnabledBySymbol?: Record<string, boolean>;
   userAddress?: string;
@@ -80,10 +78,8 @@ export default function MarketsTab({
   borrowedBalances,
   onSupplyClick,
   onBorrowClick,
-  onDecryptTotals,
   isDarkMode,
   isLoadingReserves,
-  isDecryptingTotals,
   userCollateralEnabledBySymbol,
   userAddress
 }: MarketsTabProps) {
@@ -112,25 +108,10 @@ export default function MarketsTab({
     );
   }
 
-  const anyEncrypted = Object.values(reserveTotals || {}).some(r => r && !r.isDecrypted);
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h6" sx={{ color: isDarkMode ? 'white' : '#000000' }}>Markets</Typography>
-        <Box>
-          {anyEncrypted && (
-            <Button onClick={onDecryptTotals} variant="outlined" size="small" startIcon={isDecryptingTotals ? <CircularProgress size={16} /> : undefined} sx={{
-              borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
-              color: isDarkMode ? 'white' : '#000000',
-              '&:hover': {
-                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
-                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-              }
-            }}>
-              {isDecryptingTotals ? 'Decrypting...' : 'Decrypt Totals'}
-            </Button>
-          )}
-        </Box>
       </Box>
 
       <Box sx={{ display: { xs: 'none', md: 'block' } }}>
