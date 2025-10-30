@@ -449,7 +449,11 @@ export default function Dashboard(): JSX.Element {
   }, []);
 
   // Supply positions count for tab badge
-  const { balances: suppliedBalancesMap, isLoading: isLoadingSupplied } = useSuppliedBalances(masterSignature, getMasterSignature);
+  const { 
+    balances: suppliedBalancesMap, 
+    isLoading: isLoadingSupplied,
+    forceRefresh: forceRefreshSupplied 
+  } = useSuppliedBalances(masterSignature, getMasterSignature);
   const supplyPositionsCount = useMemo(() =>
     Object.values(suppliedBalancesMap || {}).filter((b: any) => b && (b as any).hasSupplied).length
   , [suppliedBalancesMap]);
@@ -793,6 +797,7 @@ export default function Dashboard(): JSX.Element {
         cusdcBalance.forceRefresh(),
         refreshShares(),
         forceRefreshBorrowed(),
+        forceRefreshSupplied(),
         forceRefreshReserveTotals()
       ]);
       console.log('✅ All blockchain data refreshed');
@@ -806,6 +811,7 @@ export default function Dashboard(): JSX.Element {
     cusdcBalance,
     refreshShares,
     forceRefreshBorrowed,
+    forceRefreshSupplied,
     forceRefreshReserveTotals
   ]);
 
@@ -814,14 +820,16 @@ export default function Dashboard(): JSX.Element {
       console.log(`📝 Supply transaction completed for ${selectedAsset.symbol}`);
     }
     await refreshAllBalances();
-  }, [selectedAsset, refreshAllBalances]);
+    forceRefreshSupplied();
+  }, [selectedAsset, refreshAllBalances, forceRefreshSupplied]);
 
   const handleWithdrawSuccess = useCallback(async () => {
     if (selectedAsset) {
       console.log(`📝 Withdraw transaction completed for ${selectedAsset.symbol}`);
     }
     await refreshAllBalances();
-  }, [selectedAsset, refreshAllBalances]);
+    forceRefreshSupplied();
+  }, [selectedAsset, refreshAllBalances, forceRefreshSupplied]);
 
   const handleBorrowSuccess = useCallback(async () => {
     if (selectedAsset) {

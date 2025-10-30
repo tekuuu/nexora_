@@ -36,8 +36,10 @@ export interface MarketsTabProps {
   borrowedBalances: Record<string, BorrowedBalance>;
   onSupplyClick: (asset: AvailableAsset) => void;
   onBorrowClick: (asset: AvailableAsset) => void;
+  onDecryptTotals?: () => void;
   isDarkMode: boolean;
   isLoadingReserves: boolean;
+  isDecryptingTotals?: boolean;
   // map from asset symbol to whether the user has enabled collateral for that asset
   userCollateralEnabledBySymbol?: Record<string, boolean>;
   userAddress?: string;
@@ -78,8 +80,10 @@ export default function MarketsTab({
   borrowedBalances,
   onSupplyClick,
   onBorrowClick,
+  onDecryptTotals,
   isDarkMode,
   isLoadingReserves,
+  isDecryptingTotals,
   userCollateralEnabledBySymbol,
   userAddress
 }: MarketsTabProps) {

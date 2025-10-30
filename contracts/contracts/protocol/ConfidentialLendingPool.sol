@@ -275,6 +275,12 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
             userDebt
         );
         _userBorrowedBalances[msg.sender][asset] = newDebtBalance;
+        // Make the new debt balance publicly decryptable to allow checking if it's zero
+        FHE.makePubliclyDecryptable(newDebtBalance);
+        // Clear currentDebtAsset if the debt is fully repaid (balance is zero)
+        if (FHE.decrypt(newDebtBalance) == 0) {
+            up.currentDebtAsset = address(0);
+        }
         emit Repay(asset, msg.sender);
     }
 

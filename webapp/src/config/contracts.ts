@@ -40,10 +40,10 @@ export const CONTRACTS = {
   TOKEN_SWAPPER: getRequiredEnvAddress('NEXT_PUBLIC_TOKEN_SWAPPER', process.env.NEXT_PUBLIC_TOKEN_SWAPPER),
 
   // Modular Lending Protocol
-  LENDING_POOL: getRequiredEnvAddress('NEXT_PUBLIC_LENDING_POOL', process.env.NEXT_PUBLIC_LENDING_POOL),
-  POOL_CONFIGURATOR: getRequiredEnvAddress('NEXT_PUBLIC_POOL_CONFIGURATOR', process.env.NEXT_PUBLIC_POOL_CONFIGURATOR),
-  PRICE_ORACLE: getRequiredEnvAddress('NEXT_PUBLIC_PRICE_ORACLE', process.env.NEXT_PUBLIC_PRICE_ORACLE),
-  ACL_MANAGER: getRequiredEnvAddress('NEXT_PUBLIC_ACL_MANAGER', process.env.NEXT_PUBLIC_ACL_MANAGER),
+  LENDING_POOL: getRequiredEnvAddress('LENDING_POOL', process.env.LENDING_POOL || process.env.NEXT_PUBLIC_LENDING_POOL),
+  POOL_CONFIGURATOR: getRequiredEnvAddress('POOL_CONFIGURATOR', process.env.POOL_CONFIGURATOR || process.env.NEXT_PUBLIC_POOL_CONFIGURATOR),
+  PRICE_ORACLE: getRequiredEnvAddress('PRICE_ORACLE', process.env.PRICE_ORACLE || process.env.NEXT_PUBLIC_PRICE_ORACLE),
+  ACL_MANAGER: getRequiredEnvAddress('ACL_MANAGER', process.env.ACL_MANAGER || process.env.NEXT_PUBLIC_ACL_MANAGER),
 
   // Libraries
   SUPPLY_LOGIC: getRequiredEnvAddress('NEXT_PUBLIC_SUPPLY_LOGIC', process.env.NEXT_PUBLIC_SUPPLY_LOGIC),

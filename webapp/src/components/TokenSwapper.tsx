@@ -573,7 +573,7 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       )}
 
       {/* Operator approval alerts for two-phase unwrap flow */}
-      {operatorApprovalNeeded && !operatorApprovalHash && (
+      {operatorApprovalNeeded && !operatorApprovalCompleted && (
         <Alert severity="info" sx={{ mb: 2 }}>
           This swap requires two transactions: (1) Approve the swapper as operator, (2) Execute the swap.
         </Alert>

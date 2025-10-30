@@ -1,0 +1,55 @@
+name: Contracts CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths: [contracts/**]
+  pull_request:
+    branches: [main, develop]
+    paths: [contracts/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-ci:
+    name: Contracts CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint Solidity files
+        run: npm run lint:sol
+
+      - name: Compile contracts
+        run: npm run compile
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: contracts-artifacts
+          path: artifacts/
