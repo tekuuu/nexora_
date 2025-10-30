@@ -26,6 +26,8 @@ import type { BorrowedBalance } from '../hooks/useBorrowedBalances';
 import { formatUnits } from 'viem';
 import { calculateUtilizationRate } from '../utils/calculations';
 import UtilizationRateBar from './UtilizationRateBar';
+import { useAssetCollateralToggle } from '../hooks/useCollateralToggle';
+import { CONTRACTS } from '../config/contracts';
 
 export interface MarketsTabProps {
   assets: AvailableAsset[];
@@ -40,6 +42,7 @@ export interface MarketsTabProps {
   isDecryptingTotals: boolean;
   // map from asset symbol to whether the user has enabled collateral for that asset
   userCollateralEnabledBySymbol?: Record<string, boolean>;
+  userAddress?: string;
 }
 
 const formatTokenAmount = (raw: bigint | null, decimals = 18, symbol = ''): string => {
@@ -81,8 +84,16 @@ export default function MarketsTab({
   isDarkMode,
   isLoadingReserves,
   isDecryptingTotals,
-  userCollateralEnabledBySymbol
+  userCollateralEnabledBySymbol,
+  userAddress
 }: MarketsTabProps) {
+  // Check collateral status for cWETH specifically - must be called before any early returns
+  const { isCollateralEnabled: isCWEthCollateralEnabled, isLoadingStatus: isLoadingCWEthCollateral } = useAssetCollateralToggle({
+    assetAddress: CONTRACTS.CONFIDENTIAL_WETH,
+    userAddress,
+    enabled: true,
+  });
+
   if (isLoadingReserves) {
     return (
       <Box display="flex" flexDirection="column" gap={2}>
@@ -102,11 +113,6 @@ export default function MarketsTab({
   }
 
   const anyEncrypted = Object.values(reserveTotals || {}).some(r => r && !r.isDecrypted);
-
-  const hasUserEnabledCollateral = (userCollateralEnabledBySymbol?: Record<string, boolean>) => {
-    // Check if cWETH is enabled as collateral (the only collateral asset in the protocol)
-    return userCollateralEnabledBySymbol?.['cWETH'] ?? false;
-  };
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -199,8 +205,8 @@ export default function MarketsTab({
                       <Box display="flex" gap={1}>
                       <Button size="small" variant="contained" onClick={() => onSupplyClick(asset)}>Supply</Button>
                       {(() => {
-                        const hasCollateral = hasUserEnabledCollateral(userCollateralEnabledBySymbol);
-                        const isChecking = userCollateralEnabledBySymbol === undefined;
+                        const hasCollateral = isCWEthCollateralEnabled ?? false;
+                        const isChecking = isLoadingCWEthCollateral;
                         const canBorrow = asset.borrowingEnabled && hasCollateral;
 
                         if (!asset.borrowingEnabled) {
@@ -330,8 +336,8 @@ export default function MarketsTab({
                     <Box mt={2} display="flex" gap={1}>
                       <Button fullWidth size="small" variant="contained" onClick={() => onSupplyClick(asset)}>Supply</Button>
                       {(() => {
-                        const hasCollateral = hasUserEnabledCollateral(userCollateralEnabledBySymbol);
-                        const isChecking = userCollateralEnabledBySymbol === undefined;
+                        const hasCollateral = isCWEthCollateralEnabled ?? false;
+                        const isChecking = isLoadingCWEthCollateral;
                         const canBorrow = asset.borrowingEnabled && hasCollateral;
 
                         if (!asset.borrowingEnabled) {

@@ -2372,6 +2372,7 @@ export default function Dashboard(): JSX.Element {
                   isLoadingReserves={isLoadingReserves}
                   isDecryptingTotals={isDecryptingTotals}
                   userCollateralEnabledBySymbol={userCollateralEnabledBySymbol}
+                  userAddress={address}
                 />
               </CardContent>
             </Card>
