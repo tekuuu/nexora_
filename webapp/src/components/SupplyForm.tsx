@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt, useWalletClient } from 'wagmi';
 import { createPublicClient, http, encodeFunctionData, parseUnits } from 'viem';
 import { sepolia } from 'wagmi/chains';
-import { getSafeContractAddresses } from '../config/contractConfig';
 import { CONTRACTS } from '../config/contracts';
 import { POOL_ABI } from '../config/poolABI';
 import { getSepoliaRpcUrl } from '../utils/rpc';
@@ -15,16 +14,13 @@ import {
   Typography,
   Alert,
   CircularProgress,
-  Card,
-  CardContent,
   Divider,
   Chip,
 } from '@mui/material';
-import { Send, AccountBalance } from '@mui/icons-material';
 import { getFHEInstance } from '../utils/fhe';
 import { useGasFee } from '../hooks/useGasFee';
+import { parseTransactionError } from '../utils/errorHandling';
 
-// Contract ABI for cWETH token - Updated for ConfidentialFungibleToken
 const CWETH_ABI = [
   {
     "inputs": [
@@ -236,17 +232,11 @@ export default function SupplyForm({
   const [showSuccess, setShowSuccess] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
   const [pendingSupplyAmount, setPendingSupplyAmount] = useState<string | null>(null);
-  const [approvalHash, setApprovalHash] = useState<string | null>(null);
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [transactionError, setTransactionError] = useState<string | null>(null);
   const [userCancelled, setUserCancelled] = useState(false);
-
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = contractAddresses?.POOL_ADDRESS;
-  const ASSET_ADDRESS = asset.address; // Use dynamic asset address
-  
+  const [transactionPhase, setTransactionPhase] = useState<null | 'operator-approval' | 'supply'>(null);
 
   // Balance validation with decryption and gas fees
   useEffect(() => {
@@ -281,8 +271,6 @@ export default function SupplyForm({
           isValid 
         });
       } else {
-        // If balance is encrypted (••••••••), just check if amount is positive
-        // User can enter any positive amount since we can't decrypt to validate
         const isValid = amountTokens > 0;
         setIsValidAmount(isValid);
         console.log('🔍 Encrypted balance validation:', { amountTokens, isValid });
@@ -309,9 +297,9 @@ export default function SupplyForm({
 
   // Function to check if pool is operator
   const checkOperatorStatus = useCallback(async () => {
-    console.log('checkOperatorStatus called with:', { address, ASSET_ADDRESS, POOL_ADDRESS });
+    console.log('checkOperatorStatus called with:', { address, assetAddress: asset.address, poolAddress: CONTRACTS.LENDING_POOL });
     
-    if (!address || !ASSET_ADDRESS || !POOL_ADDRESS) {
+    if (!address || !asset.address) {
       console.log('Missing required parameters for checkOperatorStatus');
       return;
     }
@@ -333,11 +321,11 @@ export default function SupplyForm({
       }
       
       const result = await publicClient.call({
-        to: ASSET_ADDRESS as `0x${string}`,
+        to: asset.address as `0x${string}`,
         data: encodeFunctionData({
           abi: CWETH_ABI,
           functionName: 'isOperator',
-          args: [address as `0x${string}`, POOL_ADDRESS as `0x${string}`],
+          args: [address as `0x${string}`, CONTRACTS.LENDING_POOL as `0x${string}`],
         }),
       });
 
@@ -355,7 +343,7 @@ export default function SupplyForm({
       console.error('Failed to check operator status:', error);
       setIsApproved(false);
     }
-  }, [address, ASSET_ADDRESS, POOL_ADDRESS]);
+  }, [address, asset.address]);
 
   // Check operator status when amount changes
   useEffect(() => {
@@ -368,26 +356,15 @@ export default function SupplyForm({
   // No need for duplicate validation logic here
 
   useEffect(() => {
-    console.log('Hash effect triggered:', { hash, isApproved });
-    // Track approval transactions separately from supply transactions
-    // If we have a hash and operator is not yet approved, this must be an approval tx
-    if (hash && !isApproved) {
-      console.log('Setting approval hash:', hash);
-      setApprovalHash(hash);
-    }
-  }, [hash, isApproved]);
-
-  useEffect(() => {
     console.log('Transaction success effect triggered:', { 
       isSuccess, 
       isReceiptError, 
-      approvalHash, 
       isApproved, 
       hash,
       error: error?.message 
     });
     
-    if (isSuccess && approvalHash) {
+    if (isSuccess && transactionPhase === 'operator-approval') {
       // Operator permission was successful, now check operator status
       console.log('Operator permission successful, checking status...');
       setTimeout(() => {
@@ -402,12 +379,13 @@ export default function SupplyForm({
           setPendingSupplyAmount(null);
         }, 2500);
       }
-    } else if (isSuccess && !approvalHash) {
+      setTransactionPhase(null);
+    } else if (isSuccess && transactionPhase === 'supply') {
       // This is the supply transaction success
       console.log('✅ Supply transaction successful!');
       setShowSuccess(true);
+      setTransactionPhase(null);
       setAmount('');
-      setApprovalHash(null);
       // DON'T reset isApproved here - operator permission persists!
       setTransactionError(null);
       setUserCancelled(false);
@@ -429,7 +407,7 @@ export default function SupplyForm({
     } else if (isReceiptError) {
       console.log('❌ Transaction receipt shows error - transaction failed on-chain');
     }
-  }, [isSuccess, isReceiptError, approvalHash, checkOperatorStatus, hash, error, onTransactionSuccess, resetWrite]);
+  }, [isSuccess, isReceiptError, checkOperatorStatus, hash, error, onTransactionSuccess, resetWrite]);
 
   // Handle transaction errors
   useEffect(() => {
@@ -437,16 +415,18 @@ export default function SupplyForm({
       console.log('Transaction error:', error);
       
       // Check if user rejected the transaction
-      if (error.message.toLowerCase().includes('user rejected') || 
+      if (error.message.toLowerCase().includes('user rejected') ||
           error.message.toLowerCase().includes('user denied') ||
           error.message.toLowerCase().includes('rejected the request')) {
         setUserCancelled(true);
         setTransactionError(null);
+        setTransactionPhase(null);
         setAmount(''); // Clear input on cancellation
       } else {
         // Other errors (network, contract, etc.)
-        setTransactionError(error.message);
+        setTransactionError(parseTransactionError(error));
         setUserCancelled(false);
+        setTransactionPhase(null);
         setAmount(''); // Clear input on error
       }
       
@@ -476,6 +456,7 @@ export default function SupplyForm({
 
   const performSupply = async (supplyAmount: string) => {
     if (!supplyAmount || !address || !walletClient) return;
+    setTransactionPhase('supply');
     try {
       const amountUnits = parseUnits(supplyAmount, asset.decimals);
       console.log('Step 2: Creating encrypted input for confidential transfer...');
@@ -483,7 +464,7 @@ export default function SupplyForm({
         supplyAmount,
         amountUnits: amountUnits.toString(),
         assetDecimals: asset.decimals,
-        poolAddress: POOL_ADDRESS,
+        poolAddress: CONTRACTS.LENDING_POOL,
         userAddress: address
       });
       
@@ -493,10 +474,10 @@ export default function SupplyForm({
       
       // Bind encrypted input to the Pool contract (Pool calls FHE.fromExternal)
       const input = (fheInstance as any).createEncryptedInput(
-        POOL_ADDRESS as `0x${string}`,
+        CONTRACTS.LENDING_POOL as `0x${string}`,
         address as `0x${string}`
       );
-      console.log('✅ Encrypted input created, bound to Pool contract:', POOL_ADDRESS);
+      console.log('✅ Encrypted input created, bound to Pool contract:', CONTRACTS.LENDING_POOL);
       
       input.add64(amountUnits);
       console.log('✅ Amount added to encrypted input');
@@ -526,7 +507,7 @@ export default function SupplyForm({
       const formattedInputProof = toHex(inputProofRaw);
       
       console.log('📦 Supply transaction parameters:', {
-        poolAddress: POOL_ADDRESS,
+        poolAddress: CONTRACTS.LENDING_POOL,
         assetAddress: asset.address,
         assetSymbol: asset.symbol,
         amountUnits: amountUnits.toString(),
@@ -536,7 +517,7 @@ export default function SupplyForm({
       });
       
       writeContract({
-        address: POOL_ADDRESS as `0x${string}`,
+        address: CONTRACTS.LENDING_POOL as `0x${string}`,
         abi: POOL_ABI,
         functionName: 'supply',
         args: [
@@ -567,19 +548,20 @@ export default function SupplyForm({
       if (!isApproved) {
         // Step 1: Set vault as operator (time-limited permission)
         console.log('Step 1: Setting vault as operator...');
+        setTransactionPhase('operator-approval');
         const until = Math.floor(Date.now() / 1000) + 3600; // Current timestamp + 1 hour
         console.log('setOperator parameters:', {
-          address: ASSET_ADDRESS,
-          poolAddress: POOL_ADDRESS,
+          address: asset.address,
+          poolAddress: CONTRACTS.LENDING_POOL,
           until: until,
           untilType: typeof until
         });
         try {
           writeContract({
-            address: ASSET_ADDRESS as `0x${string}`,
+            address: asset.address as `0x${string}`,
             abi: CWETH_ABI,
             functionName: 'setOperator',
-            args: [POOL_ADDRESS as `0x${string}`, until],
+            args: [CONTRACTS.LENDING_POOL as `0x${string}`, until],
           });
           console.log('Operator permission initiated...');
         } catch (writeError) {
@@ -669,7 +651,7 @@ export default function SupplyForm({
           }}
         >
           <Typography variant="body2" sx={{ fontFamily: 'sans-serif' }}>
-            {isApproved ? `Successfully supplied ${asset.symbol}!` : 'Operator set! Click Supply again to complete.'}
+            Successfully supplied {asset.symbol}!
           </Typography>
         </Alert>
       )}
@@ -891,7 +873,7 @@ export default function SupplyForm({
         <Chip
           size="small"
           variant="outlined"
-          label={`FHE: Pool ${POOL_ADDRESS ? `${POOL_ADDRESS.slice(0, 6)}...${POOL_ADDRESS.slice(-4)}` : 'N/A'}`}
+          label={`FHE: Pool ${CONTRACTS.LENDING_POOL.slice(0, 6)}...${CONTRACTS.LENDING_POOL.slice(-4)}`}
         />
         <Chip
           size="small"
@@ -913,14 +895,8 @@ export default function SupplyForm({
         size="medium"
         onClick={handleSupply}
         disabled={!isValidAmount || isPending || isConfirming || isEncrypting || !hasAsset}
-        startIcon={
-          isPending || isConfirming || isEncrypting ? (
-            <CircularProgress size={18} color="inherit" />
-          ) : (
-            <Send />
-          )
-        }
-        sx={{ 
+        startIcon={isPending || isConfirming || isEncrypting ? <CircularProgress size={20} /> : undefined}
+        sx={{
           py: 1.2,
           borderRadius: '4px',
           fontSize: '0.95rem',
@@ -950,12 +926,14 @@ export default function SupplyForm({
           }
         }}
       >
-        {isPending
-          ? 'Confirming...'
-          : isConfirming
-          ? 'Processing...'
-          : isEncrypting
-          ? 'Encrypting...'
+        {transactionPhase === 'operator-approval' && isPending
+          ? 'Setting Operator...'
+          : transactionPhase === 'operator-approval' && isConfirming
+          ? 'Confirming Approval...'
+          : transactionPhase === 'supply' && (isPending || isEncrypting)
+          ? 'Supplying...'
+          : transactionPhase === 'supply' && isConfirming
+          ? 'Confirming Supply...'
           : isApproved
           ? `Supply ${asset.symbol}`
           : 'Set Operator'}

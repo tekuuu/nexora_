@@ -8,7 +8,7 @@ import { useAvailableReserves } from './useAvailableReserves';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
 import { getSepoliaRpcUrls } from '../utils/rpc';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
 import { rpcCache, generateCacheKey, CACHE_TTL } from '../utils/rpcCache';
 import { POOL_ABI } from '../config/poolABI';
 
@@ -52,10 +52,6 @@ export function useReserveTotals(
   const isProcessingQueueRef = useRef<boolean>(false);
   const [isDecryptingTotals, setIsDecryptingTotals] = useState(false);
 
-
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = contractAddresses?.POOL_ADDRESS;
-
   const toHex32 = (v: any): `0x${string}` => {
     if (typeof v === 'string') {
       if (v.startsWith('0x')) {
@@ -75,11 +71,9 @@ export function useReserveTotals(
   };
 
   const fetchEncryptedForToken = useCallback(async (token: { address: string; symbol: string; decimals: number }) => {
-    if (!POOL_ADDRESS) return { supplied: null, borrowed: null } as { supplied: `0x${string}` | null; borrowed: `0x${string}` | null };
-
     // cache keys per field
-    const cacheKeyS = generateCacheKey(POOL_ADDRESS, 'reserve.totalSupplied', [token.address], 'GLOBAL');
-    const cacheKeyB = generateCacheKey(POOL_ADDRESS, 'reserve.totalBorrowed', [token.address], 'GLOBAL');
+    const cacheKeyS = generateCacheKey(CONTRACTS.LENDING_POOL, 'reserve.totalSupplied', [token.address], 'GLOBAL');
+    const cacheKeyB = generateCacheKey(CONTRACTS.LENDING_POOL, 'reserve.totalBorrowed', [token.address], 'GLOBAL');
     const cachedS = rpcCache.get(cacheKeyS);
     const cachedB = rpcCache.get(cacheKeyB);
     if (cachedS && cachedB) {
@@ -104,7 +98,7 @@ export function useReserveTotals(
     }
 
     const call = await publicClient.call({
-      to: POOL_ADDRESS as `0x${string}`,
+      to: CONTRACTS.LENDING_POOL as `0x${string}`,
       data: encodeFunctionData({
         abi: POOL_ABI,
         functionName: 'getReserveData',
@@ -132,11 +126,11 @@ export function useReserveTotals(
     if (sHex) rpcCache.set(cacheKeyS, sHex, CACHE_TTL.ENCRYPTED_DATA);
     if (bHex) rpcCache.set(cacheKeyB, bHex, CACHE_TTL.ENCRYPTED_DATA);
     return { supplied: sHex, borrowed: bHex };
-  }, [POOL_ADDRESS]);
+  }, []);
 
 
   const fetchAllEncrypted = useCallback(async () => {
-    if (!POOL_ADDRESS || !supplyAssets || supplyAssets.length === 0) {
+    if (!supplyAssets || supplyAssets.length === 0) {
       setEncrypted({});
       setTotals({});
       return;
@@ -179,13 +173,13 @@ export function useReserveTotals(
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [POOL_ADDRESS, supplyAssets, fetchEncryptedForToken]);
+  }, [supplyAssets, fetchEncryptedForToken]);
 
   const decryptTotals = useCallback(async (tokenSymbol: string) => {
-    if (!POOL_ADDRESS || !isConnected) {
+    if (!isConnected) {
       console.log('Missing requirements to decrypt reserve totals:', {
         isConnected,
-        POOL_ADDRESS
+        poolAddress: CONTRACTS.LENDING_POOL
       });
       return;
     }
@@ -233,8 +227,8 @@ export function useReserveTotals(
         }
 
         const handles: { handle: `0x${string}`; contractAddress: `0x${string}` }[] = [];
-        if (enc.supplied) handles.push({ handle: enc.supplied, contractAddress: POOL_ADDRESS as `0x${string}` });
-        if (enc.borrowed) handles.push({ handle: enc.borrowed, contractAddress: POOL_ADDRESS as `0x${string}` });
+        if (enc.supplied) handles.push({ handle: enc.supplied, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` });
+        if (enc.borrowed) handles.push({ handle: enc.borrowed, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` });
 
         res = await (fhe as any).userDecrypt(
           handles,
@@ -247,7 +241,11 @@ export function useReserveTotals(
           masterSig.durationDays
         );
       }
+      if (!res) {
+        throw new Error(`Failed to decrypt reserve totals for ${tokenSymbol}: no decryption result`);
+      }
 
+      // TypeScript knows res is not null from the above logic if(!res)
       const sVal = enc.supplied ? res[enc.supplied] : undefined;
       const bVal = enc.borrowed ? res[enc.borrowed] : undefined;
 
@@ -286,7 +284,7 @@ export function useReserveTotals(
     } finally {
       decryptingRefs.current[tokenSymbol] = false;
     }
-  }, [isConnected, POOL_ADDRESS, encrypted, getMasterSignature, supplyAssets]);
+  }, [isConnected, encrypted, getMasterSignature, supplyAssets]);
 
   useEffect(() => {
     decryptTotalsRef.current = decryptTotals;
@@ -350,7 +348,7 @@ export function useReserveTotals(
   }, [fetchAllEncrypted]);
 
   useEffect(() => {
-    if (POOL_ADDRESS && supplyAssetsKey) {
+    if (supplyAssetsKey) {
       if (lastFetchedAssetsKeyRef.current !== supplyAssetsKey) {
         lastFetchedAssetsKeyRef.current = supplyAssetsKey;
         fetchAllEncrypted();
@@ -360,7 +358,7 @@ export function useReserveTotals(
       setTotals({});
       lastFetchedAssetsKeyRef.current = '';
     }
-  }, [POOL_ADDRESS, supplyAssetsKey, fetchAllEncrypted]);
+  }, [supplyAssetsKey, fetchAllEncrypted]);
 
   useEffect(() => {
     if (!isLoading && isConnected && Object.keys(encrypted).length > 0) {

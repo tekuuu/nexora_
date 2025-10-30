@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { getSafeContractAddresses } from '../config/contractConfig';
 import { CONTRACTS } from '../config/contracts';
 import { POOL_ABI } from '../config/poolABI';
 import {
@@ -12,16 +11,13 @@ import {
   Typography,
   Alert,
   CircularProgress,
-  Card,
-  CardContent,
   Divider,
-  Chip,
   useTheme,
 } from '@mui/material';
-import { Send, AccountBalance } from '@mui/icons-material';
 import { getFHEInstance } from '../utils/fhe';
 import { useMasterDecryption } from '../hooks/useMasterDecryption';
 import { useGasFee } from '../hooks/useGasFee';
+import { parseTransactionError } from '../utils/errorHandling';
 
 interface WithdrawFormProps {
   onTransactionSuccess?: () => Promise<void>;
@@ -116,7 +112,7 @@ export default function WithdrawForm({
         setAmount(''); // Clear input on cancellation
       } else {
         // Other errors (network, contract, etc.)
-        setTransactionError(error.message);
+        setTransactionError(parseTransactionError(error));
         setUserCancelled(false);
         setAmount(''); // Clear input on error
       }
@@ -134,11 +130,6 @@ export default function WithdrawForm({
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [transactionError, setTransactionError] = useState<string | null>(null);
   const [userCancelled, setUserCancelled] = useState(false);
-
-  // Contract address
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = contractAddresses?.POOL_ADDRESS;
 
   useEffect(() => {
     console.log('🔍 WithdrawForm validation:', { amount, hasSupplied, suppliedBalance });
@@ -241,10 +232,10 @@ export default function WithdrawForm({
       console.log('FHE instance obtained');
 
       // Create encrypted input using the same pattern as supply
-      console.log('Creating encrypted input for pool:', POOL_ADDRESS, 'user:', address);
+      console.log('Creating encrypted input for pool:', CONTRACTS.LENDING_POOL, 'user:', address);
       
       const encryptedInput = await fheInstance.createEncryptedInput(
-        POOL_ADDRESS!,
+        CONTRACTS.LENDING_POOL,
         address
       );
       
@@ -564,14 +555,8 @@ export default function WithdrawForm({
         size="medium"
         onClick={handleWithdraw}
         disabled={!isValidAmount || isPending || isConfirming || !hasSupplied}
-        startIcon={
-          isPending || isConfirming ? (
-            <CircularProgress size={18} color="inherit" />
-          ) : (
-            <Send />
-          )
-        }
-        sx={{ 
+        startIcon={isPending || isConfirming ? <CircularProgress size={20} /> : undefined}
+        sx={{
           py: 1.2,
           borderRadius: '4px',
           fontSize: '0.95rem',

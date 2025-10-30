@@ -45,7 +45,7 @@ export default function AdminDashboardMain() {
     { label: '💰 Prices', icon: '💰' },
     { label: '👥 Roles', icon: '👥' },
     { label: '🚨 Emergency', icon: '🚨' },
-    { label: '🧩 Pool Settings', icon: '🧩' },
+    { label: '⚙️ Pool Settings', icon: '⚙️' },
   ];
 
   return (

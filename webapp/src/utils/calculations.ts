@@ -40,4 +40,4 @@ export function calculateUtilizationRateFromStrings(totalBorrowed: string, total
   }
 }
 
-// No default export — prefer named exports for utilities
+

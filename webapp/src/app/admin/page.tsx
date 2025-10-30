@@ -5,13 +5,6 @@ import CssBaseline from '@mui/material/CssBaseline';
 import AdminLayout from '@/components/admin/AdminLayout';
 import AdminDashboardMain from '@/components/admin/AdminDashboardMain';
 
-/**
- * Note:
- * Global web3 providers (Wagmi, React Query, ConnectKit) are already set up in
- * [webapp/src/app/layout.tsx](webapp/src/app/layout.tsx) via the shared
- * [webapp/src/components/Providers.tsx](webapp/src/components/Providers.tsx).
- * Avoid re-wrapping here to prevent "Multiple, nested usages of ConnectKitProvider" runtime errors.
- */
 
 // Create dark theme for admin
 const adminTheme = createTheme({

@@ -6,16 +6,8 @@ import {
   Typography,
   Grid,
   Skeleton,
-  Tooltip,
-  Chip,
   LinearProgress,
 } from '@mui/material';
-import {
-  AccountBalanceWallet,
-  TrendingUp,
-  TrendingDown,
-  HealthAndSafety,
-} from '@mui/icons-material';
 import type { SuppliedBalance } from '../hooks/useSuppliedBalances';
 import type { BorrowedBalance } from '../hooks/useBorrowedBalances';
 import type { AvailableAsset } from '../hooks/useAvailableReserves';

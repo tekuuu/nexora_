@@ -63,7 +63,7 @@ export default function PricesPanel() {
     <Card sx={{ background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(10px)' }}>
       <CardContent>
         <Typography variant="h5" gutterBottom sx={{ color: 'white', mb: 3 }}>
-          💰 Update Asset Prices
+          Update Asset Prices
         </Typography>
 
         <Grid container spacing={3}>

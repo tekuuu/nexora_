@@ -1,6 +1,6 @@
 import { createConfig, http } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
-import { getSepoliaRpcUrl } from '../utils/rpc';
+import { NETWORK_CONFIG } from './contracts';
 import { getDefaultConfig } from 'connectkit';
 
 // Create wagmi config with ConnectKit only
@@ -12,7 +12,7 @@ export const config = createConfig(
     appIcon: 'https://nexora.vercel.app/icon.png',
     chains: [sepolia],
     transports: {
-      [sepolia.id]: http(getSepoliaRpcUrl()),
+      [sepolia.id]: http(NETWORK_CONFIG.rpcUrl),
     },
     walletConnectProjectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'placeholder_project_id',
   })

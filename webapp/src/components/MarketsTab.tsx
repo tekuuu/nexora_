@@ -103,6 +103,10 @@ export default function MarketsTab({
 
   const anyEncrypted = Object.values(reserveTotals || {}).some(r => r && !r.isDecrypted);
 
+  const hasUserEnabledCollateral = (userCollateralEnabledBySymbol?: Record<string, boolean>) => {
+    // Check if cWETH is enabled as collateral (the only collateral asset in the protocol)
+    return userCollateralEnabledBySymbol?.['cWETH'] ?? false;
+  };
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -195,9 +199,9 @@ export default function MarketsTab({
                       <Box display="flex" gap={1}>
                       <Button size="small" variant="contained" onClick={() => onSupplyClick(asset)}>Supply</Button>
                       {(() => {
-                        const hasAnyCollateral = userCollateralEnabledBySymbol ? Object.values(userCollateralEnabledBySymbol).some(Boolean) : false;
+                        const hasCollateral = hasUserEnabledCollateral(userCollateralEnabledBySymbol);
                         const isChecking = userCollateralEnabledBySymbol === undefined;
-                        const canBorrow = asset.borrowingEnabled && hasAnyCollateral;
+                        const canBorrow = asset.borrowingEnabled && hasCollateral;
 
                         if (!asset.borrowingEnabled) {
                           return (
@@ -212,7 +216,8 @@ export default function MarketsTab({
 
                         if (isChecking) {
                           return (
-                            <Tooltip title="Checking collateral status...">
+                            // TODO: Update to generic message when supporting multiple collateral assets
+                            <Tooltip title="Checking cWETH collateral status...">
                               <span>
                                 <Button size="small" variant="outlined" disabled startIcon={<CircularProgress size={14} />} sx={{
                                   borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.8)',
@@ -229,7 +234,8 @@ export default function MarketsTab({
 
                         if (!canBorrow) {
                           return (
-                            <Tooltip title="Enable collateral for any asset first"><span><Button size="small" variant="outlined" disabled sx={{
+                            // TODO: Update to generic message when supporting multiple collateral assets
+                            <Tooltip title="Enable cWETH as collateral first"><span><Button size="small" variant="outlined" disabled sx={{
                               borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.8)',
                               color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : '#000000',
                               backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)',
@@ -324,8 +330,9 @@ export default function MarketsTab({
                     <Box mt={2} display="flex" gap={1}>
                       <Button fullWidth size="small" variant="contained" onClick={() => onSupplyClick(asset)}>Supply</Button>
                       {(() => {
-                        const hasAnyCollateral = userCollateralEnabledBySymbol ? Object.values(userCollateralEnabledBySymbol).some(Boolean) : false;
-                        const canBorrow = asset.borrowingEnabled && hasAnyCollateral;
+                        const hasCollateral = hasUserEnabledCollateral(userCollateralEnabledBySymbol);
+                        const isChecking = userCollateralEnabledBySymbol === undefined;
+                        const canBorrow = asset.borrowingEnabled && hasCollateral;
 
                         if (!asset.borrowingEnabled) {
                           return (
@@ -338,9 +345,28 @@ export default function MarketsTab({
                           );
                         }
 
+                        if (isChecking) {
+                          return (
+                            // TODO: Update to generic message when supporting multiple collateral assets
+                            <Tooltip title="Checking cWETH collateral status...">
+                              <span>
+                                <Button fullWidth size="small" variant="outlined" disabled startIcon={<CircularProgress size={14} />} sx={{
+                                  borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.8)',
+                                  color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : '#000000',
+                                  backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)',
+                                  opacity: 0.9,
+                                }}>
+                                  Borrow
+                                </Button>
+                              </span>
+                            </Tooltip>
+                          );
+                        }
+
                         if (!canBorrow) {
                           return (
-                            <Tooltip title="Enable collateral for any asset first"><span><Button fullWidth size="small" variant="outlined" disabled sx={{
+                            // TODO: Update to generic message when supporting multiple collateral assets
+                            <Tooltip title="Enable cWETH as collateral first"><span><Button fullWidth size="small" variant="outlined" disabled sx={{
                               borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.8)',
                               color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : '#000000',
                               backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)',

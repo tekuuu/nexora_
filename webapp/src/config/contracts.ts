@@ -1,38 +1,58 @@
-// Contract addresses for Sepolia network
+/**
+ * Validation helper for required environment variables that are strings.
+ * Validates that a value exists but does NOT validate address format.
+ */
+function getRequiredEnvString(key: string, value: string | undefined): string {
+  if (!value || value.trim() === '') {
+    throw new Error(`Missing required environment variable: ${key}. Please check your .env.local file and ensure all required variables are set.`);
+  }
+  return value.trim();
+}
+
+/**
+ * Validation helper for required environment variables that are Ethereum addresses.
+ * Validates Ethereum address format in addition to existence check.
+ */
+function getRequiredEnvAddress(key: string, value: string | undefined): string {
+  const address = getRequiredEnvString(key, value);  // ✅ Different name
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    throw new Error(`Invalid Ethereum address for ${key}: ${address}. Addresses must start with '0x' followed by exactly 40 hexadecimal characters. Please check your .env.local file.`);
+  }
+  return address;
+}
+
+/**
+ * Contract addresses loaded from environment variables.
+ * All addresses are validated on startup - the app will not start if any are missing or invalid.
+ */
 export const CONTRACTS = {
   // Original ERC20 tokens on Sepolia
-  WETH: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9',
-  USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-  DAI: '0x75236711d42D0f7Ba91E03fdCe0C9377F5b76c07',
-  
-  // Confidential ERC7984 tokens (✨ DEPLOYMENT #6 - DECIMAL MIXING FIX)
-  CONFIDENTIAL_WETH: '0x4166b48d16e0DC31B10D7A1247ACd09f01632cBC',
-  CONFIDENTIAL_USDC: '0xc323ccD9FcD6AfC3a0D568E4a6E522c41aEE04C4',
-  CONFIDENTIAL_DAI: '0xd57a787BfDb9C86c0B1E0B5b7a316f8513F2E0D1',
+  WETH: getRequiredEnvAddress('NEXT_PUBLIC_WETH', process.env.NEXT_PUBLIC_WETH),
+  USDC: getRequiredEnvAddress('NEXT_PUBLIC_USDC', process.env.NEXT_PUBLIC_USDC),
+  DAI: getRequiredEnvAddress('NEXT_PUBLIC_DAI', process.env.NEXT_PUBLIC_DAI),
 
-  
-  // Token Swapper (✨ DEPLOYMENT #6 - FINAL - with correct NEW token addresses)
-  TOKEN_SWAPPER: '0xD662eC4370081be9d7Fca9599ad3E8f60235e7d9',
-  
-  // 🆕 MODULAR LENDING PROTOCOL (✨ DEPLOYMENT #12 - DEBT CONVERSION BUG FIXED!)
+  // Confidential ERC7984 tokens
+  CONFIDENTIAL_WETH: getRequiredEnvAddress('NEXT_PUBLIC_CONFIDENTIAL_WETH', process.env.NEXT_PUBLIC_CONFIDENTIAL_WETH),
+  CONFIDENTIAL_USDC: getRequiredEnvAddress('NEXT_PUBLIC_CONFIDENTIAL_USDC', process.env.NEXT_PUBLIC_CONFIDENTIAL_USDC),
+  CONFIDENTIAL_DAI: getRequiredEnvAddress('NEXT_PUBLIC_CONFIDENTIAL_DAI', process.env.NEXT_PUBLIC_CONFIDENTIAL_DAI),
 
+  // Token Swapper
+  TOKEN_SWAPPER: getRequiredEnvAddress('NEXT_PUBLIC_TOKEN_SWAPPER', process.env.NEXT_PUBLIC_TOKEN_SWAPPER),
 
-   LENDING_POOL: '0xAC819752A55787ae6eDDbEB6482f2a0be99954BE',
-   POOL_CONFIGURATOR: '0x7cAb8B1f9e1F553B7e12634E66177C7f1530ec6F',
-   PRICE_ORACLE: '0xB37401ad109151693EC0428eA425Ed9182bBF4C9',
-   ACL_MANAGER: '0x389F0F9F89FB67539b5c4747256a8e45e4BfA20E',
+  // Modular Lending Protocol
+  LENDING_POOL: getRequiredEnvAddress('NEXT_PUBLIC_LENDING_POOL', process.env.NEXT_PUBLIC_LENDING_POOL),
+  POOL_CONFIGURATOR: getRequiredEnvAddress('NEXT_PUBLIC_POOL_CONFIGURATOR', process.env.NEXT_PUBLIC_POOL_CONFIGURATOR),
+  PRICE_ORACLE: getRequiredEnvAddress('NEXT_PUBLIC_PRICE_ORACLE', process.env.NEXT_PUBLIC_PRICE_ORACLE),
+  ACL_MANAGER: getRequiredEnvAddress('NEXT_PUBLIC_ACL_MANAGER', process.env.NEXT_PUBLIC_ACL_MANAGER),
 
-
-  
-  // Libraries (for reference)
-  SUPPLY_LOGIC: '0x194A6574816dD85564B229Eb46d10188FcB099c5',
-  BORROW_LOGIC: '0x3901A05A82909C14cd7820a0Ee3c31ebE8395cFa',
-  
-  // 📝 OLD: Simple Vault (kept for reference, migrating to LENDING_POOL)
-  // VAULT_ADDRESS: '0x5A8E9f71BDA27F04a18364604C8e55e472c7e6F4', // Deprecated
+  // Libraries
+  SUPPLY_LOGIC: getRequiredEnvAddress('NEXT_PUBLIC_SUPPLY_LOGIC', process.env.NEXT_PUBLIC_SUPPLY_LOGIC),
+  BORROW_LOGIC: getRequiredEnvAddress('NEXT_PUBLIC_BORROW_LOGIC', process.env.NEXT_PUBLIC_BORROW_LOGIC),
 } as const;
 
-// Token metadata
+/**
+ * Token metadata mapping.
+ */
 export const TOKEN_INFO = {
   [CONTRACTS.WETH]: {
     name: 'Wrapped Ether',
@@ -57,10 +77,24 @@ export const TOKEN_INFO = {
   }
 } as const;
 
-// Network configuration
+/**
+ * Network configuration loaded from environment variables.
+ */
 export const NETWORK_CONFIG = {
-  chainId: 11155111, // Sepolia
+  chainId: parseInt(getRequiredEnvString('NEXT_PUBLIC_CHAIN_ID', process.env.NEXT_PUBLIC_CHAIN_ID)),
   name: 'Sepolia',
-  rpcUrl: 'https://sepolia.infura.io/v3/06f71af0371e488499064e57e093ed99',
-  explorerUrl: 'https://sepolia.etherscan.io'
+  rpcUrl: getRequiredEnvString('NEXT_PUBLIC_RPC_URL', process.env.NEXT_PUBLIC_RPC_URL),
+  explorerUrl: getRequiredEnvString('NEXT_PUBLIC_NETWORK_EXPLORER_URL', process.env.NEXT_PUBLIC_NETWORK_EXPLORER_URL),
 } as const;
+
+/**
+ * Admin wallets loaded from environment variables.
+ * Comma-separated list of Ethereum addresses, validated on startup.
+ */
+const adminWalletsStr = getRequiredEnvString('NEXT_PUBLIC_ADMIN_WALLETS', process.env.NEXT_PUBLIC_ADMIN_WALLETS);
+export const ADMIN_WALLETS = adminWalletsStr.split(',').map(addr => addr.trim().toLowerCase()).map(addr => {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+    throw new Error(`Invalid admin wallet address: ${addr}. Addresses must start with '0x' followed by exactly 40 hexadecimal characters. Please check your .env.local file.`);
+  }
+  return addr;
+});

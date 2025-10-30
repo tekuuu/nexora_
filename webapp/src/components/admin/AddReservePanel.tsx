@@ -453,7 +453,7 @@ export default function AddReservePanel() {
 
             <Alert severity="success" sx={{ mb: 3 }}>
               <Typography variant="body2">
-                <strong>Next Steps:</strong> Users can now supply {assetSymbol || 'this asset'} to the protocol. You can configure additional parameters in the "Configure" tab.
+                <strong>Next Steps:</strong> Users can now supply {assetSymbol || 'this asset'} to the protocol. You can configure additional parameters in the &quot;Configure&quot; tab
               </Typography>
             </Alert>
 

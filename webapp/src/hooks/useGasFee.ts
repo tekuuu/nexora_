@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { createPublicClient, http } from 'viem';
 import { sepolia } from 'wagmi/chains';
-import { CONTRACTS } from '../config/contracts';
 import { getSepoliaRpcUrl } from '../utils/rpc';
 
 export const useGasFee = () => {
@@ -17,6 +16,7 @@ export const useGasFee = () => {
   const GAS_LIMITS = {
     SUPPLY: BigInt(800000), // Supply operation with FHE encryption
     WITHDRAW: BigInt(800000), // Withdraw operation with FHE encryption
+    REPAY: BigInt(900000),
     SET_OPERATOR: BigInt(100000), // Setting operator permission
   };
 

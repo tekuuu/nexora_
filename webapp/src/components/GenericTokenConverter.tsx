@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
 import { createPublicClient, http, parseEther, parseUnits } from 'viem';
-import { getSafeContractAddresses } from '../config/contractConfig';
 import { CONTRACTS } from '../config/contracts';
 import {
   Box,
@@ -25,6 +24,7 @@ import {
 import { SwapHoriz, AccountBalance, SwapVert } from '@mui/icons-material';
 import { useConfidentialTokenBalance } from '../hooks/useConfidentialTokenBalance';
 import { useMasterDecryption } from '../hooks/useMasterDecryption';
+import { parseTransactionError } from '../utils/errorHandling';
 
 // Contract ABI for ConfidentialWETH wrap/unwrap functions
 const CWETH_ABI = [
@@ -111,7 +111,7 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
         console.log('✅ FHE initialized successfully');
       } catch (error) {
         console.error('❌ FHE initialization failed:', error);
-        setFheError(error instanceof Error ? error.message : 'Failed to initialize FHE');
+        setFheError(parseTransactionError(error));
         setFheInitialized(false);
       }
     };
@@ -119,12 +119,7 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
     initializeFHE();
   }, [isConnected, address]);
 
-  // Contract address
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
-  const CWETH_ADDRESS = contractAddresses?.CWETH_ADDRESS;
-  
-  // Contract address loaded
+
 
   // Get master decryption info
   const { masterSignature, getMasterSignature } = useMasterDecryption();
@@ -225,7 +220,7 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
       if (swapDirection === 'wrap') {
         console.log('📦 Starting wrap process...');
         await writeContract({
-          address: CWETH_ADDRESS as `0x${string}`,
+          address: CONTRACTS.CONFIDENTIAL_WETH as `0x${string}`,
           abi: CWETH_ABI,
           functionName: 'wrap',
           value: parseEther(amount),
@@ -251,7 +246,7 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
         
         // Encrypt amount for unwrap step
         const encryptedAmount = await encryptAndRegister(
-          CWETH_ADDRESS!,
+          CONTRACTS.CONFIDENTIAL_WETH,
           address,
           amountWei
         );
@@ -266,11 +261,11 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
         
         // Single-step unwrap: burn cWETH and withdraw ETH
         await writeContract({
-          address: CWETH_ADDRESS as `0x${string}`,
+          address: CONTRACTS.CONFIDENTIAL_WETH as `0x${string}`,
           abi: CWETH_ABI,
           functionName: 'unwrap',
           args: [
-            encryptedAmount.handles[0] as `0x${string}`, 
+            encryptedAmount.handles[0] as `0x${string}`,
             encryptedAmount.inputProof as `0x${string}`,
             amountWei
           ],
@@ -311,7 +306,7 @@ export default function ETHToCWETHConverter({ onTransactionSuccess }: ETHToCWETH
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {swapDirection === 'wrap' ? 'Conversion' : 'Unwrapping'} failed: {error.message}
+          {swapDirection === 'wrap' ? 'Conversion' : 'Unwrapping'} failed: {parseTransactionError(error)}
         </Alert>
       )}
 

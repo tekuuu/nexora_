@@ -6,7 +6,6 @@ import { createPublicClient, http, encodeFunctionData } from 'viem';
 import { sepolia } from 'wagmi/chains';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
-import { getSafeContractAddresses } from '../config/contractConfig';
 import { getSepoliaRpcUrls } from '../utils/rpc';
 import { rpcCache, generateCacheKey, CACHE_TTL } from '../utils/rpcCache';
 

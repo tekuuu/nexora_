@@ -1,13 +1,13 @@
 /**
  * Admin Configuration
  * Defines admin wallets and access control
+ *
+ * Admin wallets are now configured via environment variables in .env.local
  */
 
-// Admin wallet addresses (POOL_ADMIN role holders)
-export const ADMIN_WALLETS = [
-  '0xcC5C64e2Ff52d9b2D95B5dc9d4B1e9Edf232693B', // Deployer
-  // Add more admin addresses here as needed
-].map(addr => addr.toLowerCase());
+import { ADMIN_WALLETS } from '../contracts';
+
+export { ADMIN_WALLETS };
 
 /**
  * Check if a wallet address is an admin

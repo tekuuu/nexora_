@@ -5,16 +5,9 @@ import { useAccount, useBalance, useConnect, useDisconnect, useWriteContract, us
 import { useQueryClient } from '@tanstack/react-query';
 import isEqual from 'fast-deep-equal';
 import { ConnectKitButton } from 'connectkit';
-// Pool hooks - Updated to work with new Pool
-import { useSuppliedBalance } from '../hooks/useSuppliedBalance';
-// OLD: useVaultTVL, useSharePercentage (not needed with Pool)
 import { useConfidentialTokenBalance } from '../hooks/useConfidentialTokenBalance';
 import { useMasterDecryption } from '../hooks/useMasterDecryption';
 import { useAvailableReserves } from '../hooks/useAvailableReserves';
-// NEW: Efficient balance management hooks
-import { useSmartBalances } from '../hooks/useSmartBalances';
-import ContractStatusBanner from './ContractStatusBanner';
-import { getSafeContractAddresses } from '../config/contractConfig';
 import { CONTRACTS, TOKEN_INFO } from '../config/contracts';
 import { TOKEN_METADATA } from '../config/tokenMetadata';
 import {
@@ -47,14 +40,9 @@ import SupplyForm from './SupplyForm';
 import WithdrawForm from './WithdrawForm';
 import BorrowForm from './BorrowForm';
 import RepayForm from './RepayForm';
-import GenericTokenConverter from './GenericTokenConverter';
-import PositionList from './PositionList';
 import TransactionHistoryTable from './TransactionHistoryTable';
-import TokenList from './TokenList';
-import DynamicAssetSelector from './DynamicAssetSelector';
 import WalletAssetBreakdown from './WalletAssetBreakdown';
 import styles from './SwapStyles.module.css';
-// MarketsTab import removed from Dashboard — Markets live in their own dedicated tab/page.
 import MarketsTab from './MarketsTab';
 import UserOverviewSection from './UserOverviewSection';
 import UserSuppliesSection from './UserSuppliesSection';
@@ -68,8 +56,9 @@ import useCollateralToggle from '../hooks/useCollateralToggle';
 import { encryptAndRegister } from '../utils/fhe';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
 import { parseUnits } from 'viem';
+import { parseTransactionError } from '../utils/errorHandling';
 
-// Contract ABI for ConfidentialWETH wrap/unwrap functions
+// Contract ABI for ConfidentialWETH
 const CWETH_ABI = [
   {
     "inputs": [],
@@ -322,20 +311,6 @@ export default function Dashboard(): JSX.Element {
     getMasterSignature
   } = useMasterDecryption();
 
-  // NEW: Smart multi-token balance hooks - Efficient balance management (DISABLED for now to prevent spamming)
-  // const {
-  //   walletBalances,
-  //   suppliedBalances,
-  //   decryptWalletBalance,
-  //   decryptSuppliedBalance,
-  //   invalidateAfterTransaction,
-  //   isLoadingWallet,
-  //   isLoadingSupplied
-  // } = useSmartBalances(masterSignature, getMasterSignature);
-
-  // Pool position hook - Updated to work with Pool's getUserSuppliedBalance (removed single cWETH hook, using map instead)
-
-  // Borrowed balances across borrowable assets (for Borrow positions list)
   const {
     balances: borrowedBalances,
     isLoading: isLoadingBorrowed,
@@ -403,7 +378,6 @@ export default function Dashboard(): JSX.Element {
 
   // Repay handler for borrows
   const handleRepayClick = (asset: { address: string; symbol: string; decimals: number; name?: string; icon?: string; color?: string; price?: number }) => {
-    // Ensure decimals is populated; if missing, try to derive from supplyAssets or borrowAssets
     let decimals = (asset as any).decimals;
     if (decimals === undefined || decimals === null) {
       const byAddress = (supplyAssets || []).find(a => a.address?.toLowerCase() === asset.address?.toLowerCase())
@@ -547,10 +521,8 @@ export default function Dashboard(): JSX.Element {
     query: { enabled: !!address, refetchInterval: false } // DISABLED to prevent 429 errors
   });
 
-  // Contract addresses
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
-  const poolAddr = (contractAddresses?.POOL_ADDRESS as `0x${string}`) || (CONTRACTS.LENDING_POOL as `0x${string}`);
+  // Contract addresses - use centralized CONTRACTS configuration
+  const poolAddr = CONTRACTS.LENDING_POOL as `0x${string}`;
 
 
   // ABI for POOL
@@ -606,7 +578,7 @@ export default function Dashboard(): JSX.Element {
   // Per-asset user collateral status: populate a symbol -> boolean map using direct RPC reads.
   // IMPORTANT: we must NOT call React hooks inside loops. Instead perform safe contract reads
   // inside a useEffect and store the results in component state.
-  const [userCollateralEnabledBySymbol, setUserCollateralEnabledBySymbol] = useState<Record<string, boolean>>({});
+  const [userCollateralEnabledBySymbol, setUserCollateralEnabledBySymbol] = useState<Record<string, boolean> | undefined>(undefined);
   const [isLoadingCollateral, setIsLoadingCollateral] = useState<boolean>(true);
 
   // Refs to prevent concurrent fetchFlags calls, manage debounce timeout, and check dependency changes
@@ -787,25 +759,6 @@ export default function Dashboard(): JSX.Element {
   const { writeContract: writeSwapContract, writeContractAsync, data: swapHash, isPending: isSwapPending, error: swapError, reset: resetSwapWrite } = useWriteContract();
   const { isLoading: isSwapConfirming, isSuccess: isSwapSuccess } = useWaitForTransactionReceipt({ hash: swapHash });
 
-  // TVL hook - RE-ENABLED after fixing rate limiting issues
-  // OLD VAULT TVL HOOK - DISABLED (using new Pool now)
-  // const { tvlBalance: vaultTVL, hasTVL, isDecrypted: isTVLDecrypted, isDecrypting: isDecryptingTVL, isLoadingTVL: isTVLLoading, canDecrypt: canDecryptTVL, decryptTVL, lockTVL: lockTVLIndividual, refreshTVL } = useVaultTVL(masterSignature, getMasterSignature, isSwapPending || isSwapConfirming);
-  
-  // Placeholder values for disabled TVL hook
-  const vaultTVL = '0';
-  const hasTVL = false;
-  const isTVLDecrypted = false;
-  const isDecryptingTVL = false;
-  const isTVLLoading = false;
-  const canDecryptTVL = false;
-  const decryptTVL = () => {};
-  const lockTVLIndividual = () => {};
-  const refreshTVL = useCallback(() => {
-    // Placeholder - no-op. Replace with real implementation if needed.
-  }, []);
-
-  // Check if any decryption is in progress
-  const isAnyDecrypting = cwethBalance.isDecrypting || cusdcBalance.isDecrypting || isMasterDecrypting || isDecryptingTVL;
 
   // Initialize FHE on component mount
   useEffect(() => {
@@ -821,7 +774,7 @@ export default function Dashboard(): JSX.Element {
         console.log('✅ FHE initialized successfully');
       } catch (error) {
         console.error('❌ FHE initialization failed:', error);
-        setFheError(error instanceof Error ? error.message : 'Failed to initialize FHE');
+        setFheError(parseTransactionError(error));
         setFheInitialized(false);
       }
     };
@@ -829,9 +782,9 @@ export default function Dashboard(): JSX.Element {
     initializeFHE();
   }, [isConnected, address]);
 
-  // Refresh all blockchain data - wrapped in useCallback to stabilize identity
+  // Refresh all blockchain data
   const refreshAllBalances = useCallback(async () => {
-    console.log('🔄 Refreshing all blockchain data including TVL...');
+    console.log('🔄 Refreshing all blockchain data');
     try {
       await Promise.all([
         refetchWETHBalance(),
@@ -839,7 +792,6 @@ export default function Dashboard(): JSX.Element {
         cwethBalance.forceRefresh(),
         cusdcBalance.forceRefresh(),
         refreshShares(),
-        refreshTVL(), // Use explicit TVL refresh for immediate update
         forceRefreshBorrowed(),
         forceRefreshReserveTotals()
       ]);
@@ -850,20 +802,16 @@ export default function Dashboard(): JSX.Element {
   }, [
     refetchWETHBalance,
     refetchUSDCBalance,
-    // include the stable function references for confidential balance refresh
     cwethBalance,
     cusdcBalance,
     refreshShares,
-    refreshTVL,
     forceRefreshBorrowed,
     forceRefreshReserveTotals
   ]);
 
-  // NEW: Create transaction-specific callbacks (invalidation disabled for now)
   const handleSupplySuccess = useCallback(async () => {
     if (selectedAsset) {
       console.log(`📝 Supply transaction completed for ${selectedAsset.symbol}`);
-      // invalidateAfterTransaction('supply', selectedAsset.symbol);
     }
     await refreshAllBalances();
   }, [selectedAsset, refreshAllBalances]);
@@ -871,7 +819,6 @@ export default function Dashboard(): JSX.Element {
   const handleWithdrawSuccess = useCallback(async () => {
     if (selectedAsset) {
       console.log(`📝 Withdraw transaction completed for ${selectedAsset.symbol}`);
-      // invalidateAfterTransaction('withdraw', selectedAsset.symbol);
     }
     await refreshAllBalances();
   }, [selectedAsset, refreshAllBalances]);
@@ -920,13 +867,11 @@ export default function Dashboard(): JSX.Element {
   useEffect(() => {
     if (masterSignature && !isMasterDecrypting) {
       console.log('✅ Master signature available - confidential balances will auto-decrypt');
-      // The useConfidentialTokenBalance hooks handle auto-decryption automatically
-      // No need for aggressive loops that cause rate limiting!
     }
   }, [masterSignature, isMasterDecrypting]);
 
 
-  // Smart refresh after transactions - ONLY refresh once to avoid rate limiting
+  // Smart refresh after transactions 
   useEffect(() => {
     if (isSwapSuccess) {
       console.log('🎉 Swap transaction completed!');
@@ -944,13 +889,7 @@ export default function Dashboard(): JSX.Element {
     }
   }, [isSwapSuccess, refreshAllBalances, cwethBalance, cusdcBalance]);
 
-  // TVL refresh when swap completes - DISABLED to reduce RPC calls
-  // useEffect(() => {
-  //   if (isSwapSuccess) {
-  //     console.log('🎉 Swap completed, refreshing TVL...');
-  //     refreshTVL();
-  //   }
-  // }, [isSwapSuccess, refreshTVL]);
+ 
 
   // Handle swap transaction success
   useEffect(() => {
@@ -1000,7 +939,7 @@ export default function Dashboard(): JSX.Element {
       } else {
         console.log('❌ Swap transaction failed with error:', swapError.message);
         // Other errors (network, contract, etc.)
-        setSwapTransactionError(swapError.message);
+        setSwapTransactionError(parseTransactionError(swapError));
         setSwapUserCancelled(false);
         setSwapAmount(''); // Clear input on error
       }
@@ -1014,8 +953,6 @@ export default function Dashboard(): JSX.Element {
       }, 100);
     }
   }, [swapError, resetSwapWrite]);
-
-  const CWETH_ADDRESS = contractAddresses?.CWETH_ADDRESS;
 
   // Available tokens for swap
   const availableTokens = [
@@ -1444,7 +1381,7 @@ export default function Dashboard(): JSX.Element {
           address: swapperAddress as `0x${string}`,
           abi: TOKEN_SWAPPER_ABI,
           functionName: 'swapERC20ToConfidential',
-          args: [erc20Address, amountNative, address],
+          args: [erc20Address as `0x${string}`, amountNative, address as `0x${string}`],
         });
         console.log('✅ Wrap transaction submitted successfully:', result);
         
@@ -1489,7 +1426,7 @@ export default function Dashboard(): JSX.Element {
       }
     } catch (err: any) {
       console.error('❌ Swap failed:', err);
-      setSwapTransactionError(err.shortMessage || err.message || 'Swap failed');
+      setSwapTransactionError(parseTransactionError(err));
     } finally {
       setIsSwapping(false);
     }
@@ -2304,9 +2241,6 @@ export default function Dashboard(): JSX.Element {
          //mt: 0.2, //margin-top
          pb: { xs: 2, sm: 3}  // padding-bottom
       }}>
-          {/* Contract Status Banner */}
-          <ContractStatusBanner isDarkMode={isDarkMode} />
-          
           {/* Tab Content */}
           {activeTab === 'dashboard' && (
                   <Box>
@@ -2379,12 +2313,9 @@ export default function Dashboard(): JSX.Element {
                   <UserSuppliesSection
                     suppliedBalances={suppliedBalancesMap}
                     assets={supplyAssets}
-                    userCollateralEnabled={userCollateralEnabledBySymbol}
                     onWithdrawClick={handleWithdrawClick}
-                    onCollateralToggle={(asset, enabled) => toggleCollateral(asset, enabled)}
                     hasActiveBorrowsForSymbol={hasActiveBorrowsForSymbol}
                     isLoadingSupplied={isLoadingSupplied}
-                    isLoadingCollateral={isLoadingCollateral}
                     isDarkMode={isDarkMode}
                     onNavigateToMarkets={handleNavigateToMarkets}
                   />

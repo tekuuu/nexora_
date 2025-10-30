@@ -110,7 +110,7 @@ export default function PoolSettingsPanel() {
 
         <Alert severity="info" sx={{ mb: 3 }}>
           <Typography variant="body2" sx={{ color: 'white' }}>
-            Configure the pool's core dependencies. Only POOL_ADMIN can update these addresses.
+            Configure the pool&apos;s core dependencies. Only POOL_ADMIN can update these addresses.
           </Typography>
         </Alert>
 

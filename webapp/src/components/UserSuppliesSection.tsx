@@ -23,13 +23,14 @@ import {
   TableRow,
   useTheme,
 } from '@mui/material';
-import { Send, CheckCircle, Cancel, Warning } from '@mui/icons-material';
+import { Warning } from '@mui/icons-material';
 import type { SuppliedBalance } from '../hooks/useSuppliedBalances';
 import type { AvailableAsset } from '../hooks/useAvailableReserves';
 import { formatUnits } from 'viem';
 import { CONTRACTS } from '../config/contracts';
 import { useAssetCollateralToggle } from '../hooks/useCollateralToggle';
 import { useAccount } from 'wagmi';
+import { parseTransactionError } from '../utils/errorHandling';
 
 interface UserSuppliesSectionProps {
   suppliedBalances: Record<string, SuppliedBalance>;
@@ -86,7 +87,7 @@ const CollateralToggle: React.FC<CollateralToggleProps> = ({
 
   useEffect(() => {
     if (transactionError && onError) {
-      onError(transactionError);
+      onError(parseTransactionError(transactionError));
     }
   }, [transactionError, onError]);
 
@@ -103,9 +104,9 @@ const CollateralToggle: React.FC<CollateralToggleProps> = ({
       try {
         await toggleCollateral(newValue);
       } catch (err: any) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.toLowerCase().includes('cancel') && onError) {
-          onError(msg);
+        const parsed = parseTransactionError(err);
+        if (!parsed.toLowerCase().includes('cancel') && onError) {
+          onError(parsed);
         }
       }
     },
@@ -117,9 +118,9 @@ const CollateralToggle: React.FC<CollateralToggleProps> = ({
     try {
       await toggleCollateral(false);
     } catch (err: any) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.toLowerCase().includes('cancel') && onError) {
-        onError(msg);
+      const parsed = parseTransactionError(err);
+      if (!parsed.toLowerCase().includes('cancel') && onError) {
+        onError(parsed);
       }
     }
   };

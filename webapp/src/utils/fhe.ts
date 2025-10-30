@@ -3,7 +3,6 @@
 // Import polyfills first
 import './polyfills';
 
-// Types based on the official Zama example
 export interface FhevmInstance {
   getPublicKey: () => { publicKeyId: string; publicKey: Uint8Array; } | null;
   getPublicParams: (bits: 1 | 8 | 16 | 32 | 64 | 128 | 160 | 256 | 512 | 1024 | 2048) => { publicParams: Uint8Array; publicParamsId: string; } | null;
@@ -131,10 +130,7 @@ export const getFHEInstance = async (provider?: any): Promise<FhevmInstance> => 
       // Check if we have cached public key (like the official example)
       const aclAddress = relayerSDK.SepoliaConfig.aclContractAddress;
       let cachedKey = publicKeyStorage.get(aclAddress);
-      
-      // Clear cache for new contract addresses to force re-initialization
-      // Note: We'll handle contract address changes in the hooks instead
-      // This keeps the FHE utility focused on FHE operations only
+    
       
     // Creating FHE instance
     console.log('🔧 Creating FHE instance...');
@@ -174,7 +170,6 @@ export const getFHEInstance = async (provider?: any): Promise<FhevmInstance> => 
       console.error('Creating working mock instance for testing...');
       
       // Create a working mock FHE instance that can handle basic operations
-      // The structure matches what FhevmDecryptionSignature expects
       fheInstance = {
         getPublicKey: () => ({ publicKeyId: 'mock-key', publicKey: new Uint8Array(32) }),
         getPublicParams: () => ({ publicParams: new Uint8Array(32), publicParamsId: 'mock-params' }),

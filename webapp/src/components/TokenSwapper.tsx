@@ -27,6 +27,7 @@ import {
   InputLabel,
 } from '@mui/material';
 import { SwapHoriz, AccountBalance, SwapVert, Close } from '@mui/icons-material';
+import { parseTransactionError } from '../utils/errorHandling';
 
 // Contract ABIs
 const SWAPPER_ABI = [
@@ -192,15 +193,11 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const publicClient = usePublicClient();
 
-  // Separate swap transaction tracking from operator-approval tracking
-  const [swapHash, setSwapHash] = useState<string | undefined>(undefined);
-  const [swapInFlight, setSwapInFlight] = useState(false);
-
-  // Watch swap tx receipt
+  // Watch transaction receipt for the current hash
   const {
-    isLoading: isSwapConfirming,
-    isSuccess: isSwapSuccess,
-  } = useWaitForTransactionReceipt({ hash: swapHash });
+    isLoading: isConfirming,
+    isSuccess,
+  } = useWaitForTransactionReceipt({ hash });
 
   const [fheInitialized, setFheInitialized] = useState(false);
   const [fheError, setFheError] = useState<string | null>(null);
@@ -214,18 +211,15 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
   const [tokenBalance, setTokenBalance] = useState<string>('0');
   const [customError, setCustomError] = useState<string | null>(null);
 
+  // Transaction phase tracking
+  const [transactionPhase, setTransactionPhase] = useState<null | 'operator-approval' | 'swap'>(null);
+
   // Operator approval / two-phase flow state
-  const [operatorApprovalHash, setOperatorApprovalHash] = useState<string | undefined>(undefined);
   const [isCheckingOperatorStatus, setIsCheckingOperatorStatus] = useState(false);
   const [operatorApprovalNeeded, setOperatorApprovalNeeded] = useState(false);
   const [operatorApprovalCompleted, setOperatorApprovalCompleted] = useState(false);
 
-  // Watch operator approval transaction separately
-  const {
-    isLoading: isOperatorApproving,
-    isSuccess: isOperatorApproved,
-    error: operatorApprovalTxError,
-  } = useWaitForTransactionReceipt({ hash: operatorApprovalHash });
+
 
   // Available tokens
   const availableTokens: TokenOption[] = useMemo(() => [
@@ -278,7 +272,7 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
         console.log('✅ FHE initialized successfully');
       } catch (error) {
         console.error('❌ FHE initialization failed:', error);
-        setFheError(error instanceof Error ? error.message : 'Failed to initialize FHE');
+        setFheError(parseTransactionError(error));
         setFheInitialized(false);
       }
     };
@@ -329,33 +323,35 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
   }, [amount, selectedToken, tokenBalance, swapDirection, fheInitialized, fheError, availableTokens]);
 
   useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess && transactionPhase === 'swap') {
       setShowSuccess(true);
       setAmount('');
       setCustomError(null); // Clear any errors on success
+      setTransactionPhase(null);
       setTimeout(() => setShowSuccess(false), 5000);
 
       if (onTransactionSuccess) {
         onTransactionSuccess();
       }
     }
-  }, [isSuccess, onTransactionSuccess]);
+  }, [isSuccess, transactionPhase, onTransactionSuccess]);
 
   // After operator approval tx confirms, mark approval as completed
   useEffect(() => {
-    if (isOperatorApproved) {
+    if (isSuccess && transactionPhase === 'operator-approval') {
       setOperatorApprovalCompleted(true);
-      setOperatorApprovalHash(null);
       setOperatorApprovalNeeded(false);
+      setTransactionPhase(null);
       // Notify user that operator approval succeeded (they can click swap again)
       setCustomError(null);
     }
 
-    if (operatorApprovalTxError) {
-      console.error('Operator approval transaction failed:', operatorApprovalTxError);
-      setCustomError('Operator approval transaction failed. Please retry.');
+    if (error && transactionPhase === 'operator-approval') {
+      console.error('Operator approval transaction failed:', error);
+      setCustomError(parseTransactionError(error));
+      setTransactionPhase(null);
     }
-  }, [isOperatorApproved, operatorApprovalTxError]);
+  }, [isSuccess, transactionPhase, error]);
 
   // Check if the confidential token already has the swapper set as operator
   const checkOperatorApproval = async (confidentialTokenAddress: string, operatorAddress: string) => {
@@ -405,7 +401,8 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
         // Compute amount in the token's native decimals for wrap operations.
         // (Unwrap uses 6 internal decimals and is handled in the unwrap branch.)
         const amountWei = parseUnits(amount, tokenInfo.decimals);
-        
+
+        setTransactionPhase('swap');
         await writeContract({
           address: CONTRACTS.TOKEN_SWAPPER as `0x${string}`,
           abi: SWAPPER_ABI,
@@ -444,18 +441,13 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
           // Request operator approval via setOperator (24h expiry)
           const until = BigInt(Math.floor(Date.now() / 1000) + 86400);
           try {
-            const tx = await writeContract({
+            setTransactionPhase('operator-approval');
+            await writeContract({
               address: confidentialAddress as `0x${string}`,
               abi: ERC7984_ABI,
               functionName: 'setOperator',
               args: [CONTRACTS.TOKEN_SWAPPER as `0x${string}`, until],
             } as any);
-
-            // try to capture returned tx hash to watch separately
-            const txHash = (tx as any)?.hash ?? null;
-            if (txHash) {
-              setOperatorApprovalHash(txHash);
-            }
 
             // Return early to wait for approval confirmation
             setCustomError(null);
@@ -488,6 +480,7 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
 
         console.log('📝 Calling unwrap with encrypted data...');
 
+        setTransactionPhase('swap');
         await writeContract({
           address: CONTRACTS.TOKEN_SWAPPER as `0x${string}`,
           abi: SWAPPER_ABI,
@@ -501,20 +494,8 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       }
     } catch (err) {
       console.error('❌ Swap failed:', err);
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-      let friendlyMessage = 'Swap failed. Please try again.';
-
-      if (errorMessage.includes('circuit breaker is open')) {
-        friendlyMessage = 'Swap temporarily unavailable due to maintenance. Please try again later.';
-      } else if (errorMessage.includes('insufficient funds')) {
-        friendlyMessage = 'Insufficient balance to complete the swap.';
-      } else if (errorMessage.includes('user rejected')) {
-        friendlyMessage = 'Transaction was cancelled by the user.';
-      } else if (errorMessage.includes('network')) {
-        friendlyMessage = 'Network error. Please check your connection and try again.';
-      }
-
-      setCustomError(friendlyMessage);
+      setCustomError(parseTransactionError(err));
+      setTransactionPhase(null);
     }
   };
 
@@ -529,9 +510,9 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
       setBalanceWarning(null);
       setCustomError(null);
       // Clear any operator approval state when changing direction
-      setOperatorApprovalHash(null);
       setOperatorApprovalNeeded(false);
       setOperatorApprovalCompleted(false);
+      setTransactionPhase(null);
     }
   };
 
@@ -541,9 +522,9 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
     setBalanceWarning(null);
     setCustomError(null);
     // Clear operator approval state when switching tokens
-    setOperatorApprovalHash(null);
     setOperatorApprovalNeeded(false);
     setOperatorApprovalCompleted(false);
+    setTransactionPhase(null);
   };
 
   if (!isConnected) {
@@ -575,7 +556,7 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
 
       {(error || customError) && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {customError || `${swapDirection === 'wrap' ? 'Conversion' : 'Unwrapping'} failed: ${error?.message}`}
+          {customError || `${swapDirection === 'wrap' ? 'Conversion' : 'Unwrapping'} failed: ${parseTransactionError(error)}`}
         </Alert>
       )}
 
@@ -598,7 +579,7 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
         </Alert>
       )}
 
-      {operatorApprovalHash && isOperatorApproving && (
+      {transactionPhase === 'operator-approval' && isConfirming && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Waiting for operator approval confirmation...
         </Alert>
@@ -742,9 +723,9 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
             variant="contained"
             size="large"
             onClick={handleSwap}
-            disabled={!isValidAmount || isPending || isConfirming || isOperatorApproving || !selectedTokenInfo?.isDeployed}
+            disabled={!isValidAmount || isPending || isConfirming || !selectedTokenInfo?.isDeployed}
             startIcon={
-              isOperatorApproving || isPending || isConfirming ? (
+              isPending || isConfirming ? (
                 <CircularProgress size={20} />
               ) : (
                 <SwapHoriz />
@@ -752,12 +733,14 @@ export default function TokenSwapper({ onClose, onTransactionSuccess }: TokenSwa
             }
             sx={{ py: 1.5 }}
           >
-            {isOperatorApproving
+            {transactionPhase === 'operator-approval' && isPending
               ? 'Approving Operator...'
-              : isPending
-              ? 'Confirming Transaction...'
-              : isConfirming
-              ? `${swapDirection === 'wrap' ? 'Converting' : 'Unwrapping'}...`
+              : transactionPhase === 'operator-approval' && isConfirming
+              ? 'Confirming Approval...'
+              : transactionPhase === 'swap' && isPending
+              ? 'Swapping...'
+              : transactionPhase === 'swap' && isConfirming
+              ? 'Confirming Swap...'
               : operatorApprovalCompleted
               ? 'Operator Approved - Click to Swap'
               : swapDirection === 'unwrap' && !fheInitialized

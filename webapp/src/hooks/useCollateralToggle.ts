@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from 'wagmi';
 import { waitForTransactionReceipt, readContract } from '@wagmi/core';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
+import { parseTransactionError } from '../utils/errorHandling';
 
 const POOL_ABI = [
   {
@@ -43,16 +44,13 @@ export function useAssetCollateralToggle({
   userAddress,
   enabled = true,
 }: UseCollateralToggleProps) {
-  const CONTRACTS = getSafeContractAddresses();
-  const poolAddress = CONTRACTS?.POOL_ADDRESS as `0x${string}` | undefined;
-
   // Read current collateral status
   const {
     data: isCollateralEnabled,
     isLoading: isLoadingStatus,
     refetch: refetchStatus,
   } = useReadContract({
-    address: poolAddress as `0x${string}`,
+    address: CONTRACTS.LENDING_POOL as `0x${string}`,
     abi: POOL_ABI,
     functionName: 'userCollateralEnabled',
     args:
@@ -60,7 +58,7 @@ export function useAssetCollateralToggle({
         ? ([userAddress, assetAddress] as readonly [`0x${string}`, `0x${string}`])
         : undefined,
     query: {
-      enabled: enabled && !!assetAddress && !!userAddress && !!poolAddress,
+      enabled: enabled && !!assetAddress && !!userAddress,
       staleTime: 0, // Always fetch fresh data
       refetchOnMount: true, // Refetch on component mount
     },
@@ -88,7 +86,7 @@ export function useAssetCollateralToggle({
   // Surface write errors
   useEffect(() => {
     if (writeError) {
-      setTransactionError(writeError.message);
+      setTransactionError(parseTransactionError(writeError));
       // eslint-disable-next-line no-console
       console.error('❌ Collateral toggle write error:', writeError);
     }
@@ -97,7 +95,7 @@ export function useAssetCollateralToggle({
   // Surface receipt/confirmation errors
   useEffect(() => {
     if (confirmError) {
-      setTransactionError(confirmError.message);
+      setTransactionError(parseTransactionError(confirmError));
     }
   }, [confirmError]);
 
@@ -124,10 +122,6 @@ export function useAssetCollateralToggle({
       setTransactionError('Asset address not provided');
       return;
     }
-    if (!poolAddress) {
-      setTransactionError('Pool address not configured');
-      return;
-    }
 
     try {
       setTransactionError(null);
@@ -137,7 +131,7 @@ export function useAssetCollateralToggle({
       console.log(`🔄 Toggling collateral for ${assetAddress}:`, useAsCollateral);
 
       writeContract({
-        address: poolAddress,
+        address: CONTRACTS.LENDING_POOL as `0x${string}`,
         abi: POOL_ABI,
         functionName: 'setUserUseReserveAsCollateral',
         args: [assetAddress as `0x${string}`, useAsCollateral],
@@ -145,7 +139,7 @@ export function useAssetCollateralToggle({
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('❌ Error toggling collateral:', error);
-      setTransactionError(error?.message || 'Failed to toggle collateral');
+      setTransactionError(parseTransactionError(error));
     }
   };
 
@@ -170,8 +164,6 @@ export function useAssetCollateralToggle({
  */
 export default function useCollateralToggle() {
   const { address: userAddress } = useAccount();
-  const CONTRACTS = getSafeContractAddresses();
-  const poolAddress = CONTRACTS?.POOL_ADDRESS as `0x${string}` | undefined;
   const config = useConfig();
 
   const {
@@ -193,14 +185,14 @@ export default function useCollateralToggle() {
   // Surface write errors
   useEffect(() => {
     if (writeError) {
-      setError(writeError instanceof Error ? writeError : new Error(String(writeError)));
+      setError(new Error(parseTransactionError(writeError)));
     }
   }, [writeError]);
 
   // Surface receipt errors
   useEffect(() => {
     if (confirmError) {
-      setError(confirmError instanceof Error ? confirmError : new Error(String(confirmError)));
+      setError(new Error(parseTransactionError(confirmError)));
     }
   }, [confirmError]);
 
@@ -218,17 +210,12 @@ export default function useCollateralToggle() {
       setError(err);
       throw err;
     }
-    if (!poolAddress) {
-      const err = new Error('Pool address not configured');
-      setError(err);
-      throw err;
-    }
 
     setError(null);
     console.log(`🔄 Starting collateral toggle for ${asset.symbol || asset.address}: ${enabled}`);
 
     const txHash = await writeContractAsync({
-      address: poolAddress,
+      address: CONTRACTS.LENDING_POOL as `0x${string}`,
       abi: POOL_ABI,
       functionName: 'setUserUseReserveAsCollateral',
       args: [asset.address as `0x${string}`, enabled],
@@ -242,7 +229,7 @@ export default function useCollateralToggle() {
       let onchainEnabled: boolean | undefined = undefined;
       try {
         const res = await readContract(config, {
-          address: poolAddress as `0x${string}`,
+          address: CONTRACTS.LENDING_POOL as `0x${string}`,
           abi: POOL_ABI,
           functionName: 'userCollateralEnabled',
           args: [userAddress as `0x${string}`, asset.address as `0x${string}`],

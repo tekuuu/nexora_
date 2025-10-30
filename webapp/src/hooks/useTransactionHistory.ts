@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
 
 export interface TransactionHistoryItem {
   id: string;
@@ -63,15 +63,7 @@ const useTransactionHistory = () => {
     
     try {
       // Query blockchain events for ConfidentialSupply and ConfidentialWithdraw
-      const contractAddresses = getSafeContractAddresses();
-      const VAULT_ADDRESS = contractAddresses?.VAULT_ADDRESS;
-      const CWETH_ADDRESS = contractAddresses?.CWETH_ADDRESS;
-      
-      if (!VAULT_ADDRESS || !CWETH_ADDRESS) {
-        setError('Contract addresses not configured or invalid');
-        return;
-      }
-      
+
       // Get recent blocks to search for events
       const provider = new ethers.BrowserProvider(window.ethereum);
       const currentBlock = await provider.getBlockNumber();
@@ -79,7 +71,7 @@ const useTransactionHistory = () => {
       
       // Get ConfidentialSupply events
       const supplyFilter = {
-        address: VAULT_ADDRESS,
+        address: CONTRACTS.LENDING_POOL,
         topics: [
           ethers.id("ConfidentialSupply(address)") // event signature
         ]
@@ -93,7 +85,7 @@ const useTransactionHistory = () => {
       
       // Get ConfidentialWithdraw events
       const withdrawFilter = {
-        address: VAULT_ADDRESS,
+        address: CONTRACTS.LENDING_POOL,
         topics: [
           ethers.id("ConfidentialWithdraw(address)") // event signature
         ]
@@ -124,7 +116,7 @@ const useTransactionHistory = () => {
               assets: [{
                 token: 'cWETH',
                 amount: '••••••••', // Encrypted amount
-                vault: VAULT_ADDRESS
+                vault: CONTRACTS.LENDING_POOL
               }],
               apy: '0.00%', // Placeholder
               timestamp: block!.timestamp,
@@ -152,7 +144,7 @@ const useTransactionHistory = () => {
               assets: [{
                 token: 'cWETH',
                 amount: '••••••••', // Encrypted amount
-                vault: VAULT_ADDRESS
+                vault: CONTRACTS.LENDING_POOL
               }],
               apy: '0.00%', // Placeholder
               timestamp: block!.timestamp,

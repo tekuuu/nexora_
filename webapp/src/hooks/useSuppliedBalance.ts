@@ -6,7 +6,7 @@ import { createPublicClient, http, encodeFunctionData } from 'viem';
 import { sepolia } from 'wagmi/chains';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
 import { getSepoliaRpcUrls } from '../utils/rpc';
 import { getTokenMetadata } from '../config/tokenMetadata';
 
@@ -40,16 +40,12 @@ export const useSuppliedBalance = (
   const [canDecrypt, setCanDecrypt] = useState(false);
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
 
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = contractAddresses?.POOL_ADDRESS;
-
   // Refs for preventing multiple simultaneous decryption attempts
   const isDecryptingRef = useRef(false);
 
   // Fetch encrypted shares from contract
   const fetchEncryptedShares = useCallback(async () => {
-    if (!address || !POOL_ADDRESS) {
+    if (!address || !CONTRACTS.LENDING_POOL) {
       console.warn('Missing address or pool address for fetching encrypted shares');
       return;
     }
@@ -88,7 +84,7 @@ export const useSuppliedBalance = (
           }
 
           const result = await publicClient.call({
-            to: POOL_ADDRESS as `0x${string}`,
+            to: CONTRACTS.LENDING_POOL as `0x${string}`,
             data,
           });
           
@@ -117,7 +113,7 @@ export const useSuppliedBalance = (
       console.error('Failed to fetch encrypted shares:', error);
       setEncryptedShares(null);
     }
-  }, [address, asset, POOL_ADDRESS]);
+  }, [address, asset]);
 
   // Initialize when address changes
   useEffect(() => {
@@ -187,11 +183,11 @@ export const useSuppliedBalance = (
       }
 
       // Check if the master signature is authorized for the current contract address
-      if (!POOL_ADDRESS || !masterSig.contractAddresses.includes(POOL_ADDRESS as `0x${string}`)) {
+      if (!CONTRACTS.LENDING_POOL || !masterSig.contractAddresses.includes(CONTRACTS.LENDING_POOL as `0x${string}`)) {
         console.warn('⚠️ Master signature not authorized for current contract address in useSuppliedBalance.', {
-          currentPoolAddress: POOL_ADDRESS,
+          currentPoolAddress: CONTRACTS.LENDING_POOL,
           authorizedAddresses: masterSig.contractAddresses,
-          isAuthorized: masterSig.contractAddresses.includes(POOL_ADDRESS as `0x${string}`)
+          isAuthorized: masterSig.contractAddresses.includes(CONTRACTS.LENDING_POOL as `0x${string}`)
         });
         
         // For new contract addresses, try to decrypt anyway if we have a valid signature
@@ -221,7 +217,7 @@ export const useSuppliedBalance = (
       let result;
       try {
         result = await fheInstance.userDecrypt(
-          [{ handle: encryptedShares, contractAddress: POOL_ADDRESS as `0x${string}` }],
+          [{ handle: encryptedShares, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` }],
           masterSig.privateKey,
           masterSig.publicKey,
           masterSig.signature,
@@ -235,7 +231,7 @@ export const useSuppliedBalance = (
         if (decryptError.message && decryptError.message.includes('not authorized')) {
           console.warn('🚫 Authorization error during decryption in useSuppliedBalance. Clearing cache and requesting re-authorization.', {
             error: decryptError.message,
-            currentPoolAddress: POOL_ADDRESS,
+            currentPoolAddress: CONTRACTS.LENDING_POOL,
             authorizedAddresses: masterSig.contractAddresses
           });
           
@@ -301,7 +297,7 @@ export const useSuppliedBalance = (
     } finally {
       isDecryptingRef.current = false;
     }
-  }, [isConnected, address, encryptedShares, masterSignature, walletClient, getMasterSignature, POOL_ADDRESS]);
+  }, [isConnected, address, encryptedShares, masterSignature, walletClient, getMasterSignature]);
 
   // Auto-decrypt when master signature becomes available
   useEffect(() => {

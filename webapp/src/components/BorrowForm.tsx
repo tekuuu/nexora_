@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import { TrendingDown, Close } from '@mui/icons-material';
 import { getFHEInstance } from '../utils/fhe';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { parseTransactionError } from '../utils/errorHandling';
 
 interface BorrowFormProps {
   onTransactionSuccess?: () => void;
@@ -44,9 +44,6 @@ export default function BorrowForm({
 
   const { writeContract, writeContractAsync, data: hash, isPending, error: writeError, reset: resetWrite } = useWriteContract();
   const { isLoading: isConfirming, isSuccess, isError: isReceiptError } = useWaitForTransactionReceipt({ hash });
-
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = (contractAddresses?.POOL_ADDRESS || CONTRACTS.LENDING_POOL) as `0x${string}`;
 
   // Use the selected asset or default to cUSDC
   const asset = selectedAsset || {
@@ -85,7 +82,7 @@ export default function BorrowForm({
       if (msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')) {
         setTransactionError('Transaction cancelled by user');
       } else {
-        setTransactionError(writeError.message || 'Transaction failed');
+        setTransactionError(parseTransactionError(writeError));
       }
       setIsProcessing(false);
 
@@ -99,7 +96,7 @@ export default function BorrowForm({
   // Handle on-chain receipt failures
   useEffect(() => {
     if (isReceiptError) {
-      setTransactionError('Transaction failed: reverted on-chain');
+      setTransactionError(parseTransactionError(new Error('Transaction reverted on-chain')));
       setIsProcessing(false);
 
       // Clear wagmi write state to unblock the UI
@@ -122,7 +119,7 @@ export default function BorrowForm({
       // Convert amount to token units
       const amountInWei = parseUnits(amount, asset.decimals);
       console.log('🔐 Borrow start:', {
-        pool: POOL_ADDRESS,
+        pool: CONTRACTS.LENDING_POOL,
         asset: asset.address,
         symbol: asset.symbol,
         decimals: asset.decimals,
@@ -136,7 +133,7 @@ export default function BorrowForm({
 
       // Create encrypted input bound to pool
       const input = (fheInstance as any).createEncryptedInput(
-        POOL_ADDRESS as `0x${string}`,
+        CONTRACTS.LENDING_POOL as `0x${string}`,
         address as `0x${string}`
       );
 
@@ -165,7 +162,7 @@ export default function BorrowForm({
 
       // Debug: show borrow call parameters (non-sensitive)
       console.log('📦 Borrow tx params:', {
-        poolAddress: POOL_ADDRESS,
+        poolAddress: CONTRACTS.LENDING_POOL,
         assetAddress: asset.address,
         assetSymbol: asset.symbol,
         assetDecimals: asset.decimals,
@@ -177,7 +174,7 @@ export default function BorrowForm({
 
       // Call Pool.borrow() with async to surface hash/errors immediately
       const txHash = await writeContractAsync({
-        address: POOL_ADDRESS,
+        address: CONTRACTS.LENDING_POOL as `0x${string}`,
         abi: POOL_ABI,
         functionName: 'borrow',
         args: [
@@ -189,7 +186,7 @@ export default function BorrowForm({
       console.log('✅ Borrow submitted:', txHash);
     } catch (error: any) {
       console.error('Borrow error:', error);
-      setTransactionError(error.message || 'Failed to borrow');
+      setTransactionError(parseTransactionError(error));
       setIsProcessing(false);
     }
   };

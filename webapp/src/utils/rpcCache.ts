@@ -98,7 +98,7 @@ export const generateCacheKey = (
  */
 export const CACHE_TTL = {
   BALANCE: 30000,        // 30 seconds
-  ENCRYPTED_DATA: 60000, // 1 minute (encrypted data changes less frequently)
-  CONTRACT_STATE: 45000, // 45 seconds
-  USER_DATA: 30000,      // 30 seconds
+  ENCRYPTED_DATA: 60000, 
+  CONTRACT_STATE: 45000, 
+  USER_DATA: 30000,     
 } as const;

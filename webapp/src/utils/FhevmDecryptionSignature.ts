@@ -2,7 +2,6 @@
 
 import { ethers } from "ethers";
 
-// Types based on the official Zama example
 export interface EIP712Type {
   domain: {
     name: string;

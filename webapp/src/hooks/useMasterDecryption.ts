@@ -5,7 +5,6 @@ import { useAccount, useWalletClient } from 'wagmi';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
 import { ethers } from 'ethers';
-import { getSafeContractAddresses } from '../config/contractConfig';
 import { CONTRACTS } from '../config/contracts';
 
   // Master decryption contract addresses
@@ -20,8 +19,6 @@ export const useMasterDecryption = () => {
   const [masterSignature, setMasterSignature] = useState<string | null>(null);
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
   
-  // Get contract addresses with validation
-  const contractAddresses = getSafeContractAddresses();
   
   // Ref to store the actual FhevmDecryptionSignature object for reuse
   const masterSignatureRef = useRef<FhevmDecryptionSignature | null>(null);
@@ -42,7 +39,6 @@ export const useMasterDecryption = () => {
                 JSON.parse(value);
               }
             } catch (error) {
-              console.log('🧹 Clearing corrupted signature:', key);
               localStorage.removeItem(key);
             }
           }
@@ -68,13 +64,13 @@ export const useMasterDecryption = () => {
 
   // Clear decryption state when contract addresses change (no JSON parsing on hex-only storage)
   useEffect(() => {
-    if (!address || !contractAddresses) return;
+    if (!address) return;
 
     // Compare expected address set vs the currently loaded signature object
     const sigObj = masterSignatureRef.current;
 
-    const poolAddr = contractAddresses.POOL_ADDRESS || CONTRACTS.LENDING_POOL;
-    const cwethAddr = contractAddresses.CWETH_ADDRESS || CONTRACTS.CONFIDENTIAL_WETH;
+    const poolAddr = CONTRACTS.LENDING_POOL;
+    const cwethAddr = CONTRACTS.CONFIDENTIAL_WETH;
 
     const expected = [
       cwethAddr,
@@ -100,10 +96,10 @@ export const useMasterDecryption = () => {
       masterSignatureRef.current = null;
       isUnlockingRef.current = false;
     }
-  }, [address, contractAddresses]);
-  // Build dynamic address set from validated addresses to avoid mismatches with Pool address
-  const POOL_ADDR = contractAddresses?.POOL_ADDRESS || CONTRACTS.LENDING_POOL;
-  const CWETH_ADDR = contractAddresses?.CWETH_ADDRESS || CONTRACTS.CONFIDENTIAL_WETH;
+  }, [address]);
+  // Build address set from centralized configuration
+  const POOL_ADDR = CONTRACTS.LENDING_POOL;
+  const CWETH_ADDR = CONTRACTS.CONFIDENTIAL_WETH;
 
   const CONTRACT_ADDRESSES = [
     CWETH_ADDR,                         // cWETH
@@ -209,11 +205,11 @@ export const useMasterDecryption = () => {
           match: JSON.stringify(sig.contractAddresses.sort()) === JSON.stringify(CONTRACT_ADDRESSES.sort())
         });
         console.log('🔍 Detailed address breakdown:', {
-          contractAddressesCWETH: contractAddresses?.CWETH_ADDRESS,
-          contractAddressesPOOL: contractAddresses?.POOL_ADDRESS,
-          contractsTokenSwapper: CONTRACTS.TOKEN_SWAPPER,
-          contractsConfidentialUSDC: CONTRACTS.CONFIDENTIAL_USDC,
-          contractsConfidentialWETH: CONTRACTS.CONFIDENTIAL_WETH
+          cweth: CONTRACTS.CONFIDENTIAL_WETH,
+          pool: CONTRACTS.LENDING_POOL,
+          tokenSwapper: CONTRACTS.TOKEN_SWAPPER,
+          confidentialUSDC: CONTRACTS.CONFIDENTIAL_USDC,
+          confidentialWETH: CONTRACTS.CONFIDENTIAL_WETH
         });
         masterSignatureRef.current = sig;
         

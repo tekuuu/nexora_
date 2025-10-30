@@ -1,6 +1,5 @@
 /**
  * ConfidentialLendingPool ABI
- * Deployed at: 0xc292F5Ef755062e2dDC9cFD2f6C3dB54aC4908E6
  * 
  * Main entry point for all lending operations:
  * - supply() - Deposit collateral

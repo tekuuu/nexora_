@@ -8,7 +8,7 @@ import { useAvailableReserves } from './useAvailableReserves';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
 import { getSepoliaRpcUrls } from '../utils/rpc';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
 import { rpcCache, generateCacheKey, CACHE_TTL } from '../utils/rpcCache';
 
 // Pool ABI for getUserSuppliedBalance
@@ -66,20 +66,18 @@ export function useSuppliedBalances(
   const lastFetchedAssetsKeyRef = useRef<string>('');
   const decryptBalanceRef = useRef<((symbol: string) => Promise<void>) | null>(null);
 
-  // Get contract addresses
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = contractAddresses?.POOL_ADDRESS;
+
 
   /**
    * Fetch encrypted supplied balance for a single token
    */
   const fetchEncryptedBalance = useCallback(async (token: { address: string; symbol: string; decimals: number }) => {
-    if (!address || !POOL_ADDRESS) {
+    if (!address) {
       return null;
     }
 
     // Check cache first to reduce API calls
-    const cacheKey = generateCacheKey(POOL_ADDRESS, 'getUserSuppliedBalance', [address, token.address], address);
+    const cacheKey = generateCacheKey(CONTRACTS.LENDING_POOL, 'getUserSuppliedBalance', [address, token.address], address);
     const cachedData = rpcCache.get(cacheKey);
     
     if (cachedData) {
@@ -113,7 +111,7 @@ export function useSuppliedBalances(
 
       // Make contract call
       const result = await publicClient.call({
-        to: POOL_ADDRESS as `0x${string}`,
+        to: CONTRACTS.LENDING_POOL as `0x${string}`,
         data: encodeFunctionData({
             abi: POOL_ABI,
             functionName: 'getUserSuppliedBalance',
@@ -135,13 +133,13 @@ export function useSuppliedBalances(
       console.error(`Failed to fetch encrypted balance for ${token.symbol}:`, error);
           return null;
         }
-  }, [address, POOL_ADDRESS]);
+  }, [address]);
 
   /**
    * Fetch all encrypted supplied balances from Pool
    */
   const fetchAllEncryptedBalances = useCallback(async () => {
-    if (!address || !POOL_ADDRESS || !supplyAssets || supplyAssets.length === 0) {
+    if (!address || !supplyAssets || supplyAssets.length === 0) {
       setBalances({});
       setEncryptedBalances({});
       return;
@@ -203,20 +201,19 @@ export function useSuppliedBalances(
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [address, POOL_ADDRESS, supplyAssets, fetchEncryptedBalance]);
+  }, [address, supplyAssets, fetchEncryptedBalance]);
 
   /**
    * Decrypt supplied balance for a specific token
    * Follows the pattern from useConfidentialTokenBalance
    */
   const decryptBalance = useCallback(async (tokenSymbol: string) => {
-    if (!isConnected || !address || !walletClient || !masterSignature || !POOL_ADDRESS) {
+    if (!isConnected || !address || !walletClient || !masterSignature) {
       console.log('Missing requirements for decryption:', {
         isConnected,
         address,
         walletClient: !!walletClient,
-        masterSignature: !!masterSignature,
-        POOL_ADDRESS
+        masterSignature: !!masterSignature
       });
       return;
     }
@@ -258,9 +255,9 @@ export function useSuppliedBalances(
       }
 
       // Verify authorization
-      if (!POOL_ADDRESS || !masterSig.contractAddresses.includes(POOL_ADDRESS as `0x${string}`)) {
+      if (!CONTRACTS.LENDING_POOL || !masterSig.contractAddresses.includes(CONTRACTS.LENDING_POOL as `0x${string}`)) {
         console.warn('⚠️ Master signature not authorized for POOL contract', {
-          poolAddress: POOL_ADDRESS,
+          poolAddress: CONTRACTS.LENDING_POOL,
           authorizedAddresses: masterSig.contractAddresses
         });
       }
@@ -272,7 +269,7 @@ export function useSuppliedBalances(
 
       // Decrypt balance using master signature
       const result = await fheInstance.userDecrypt(
-        [{ handle: encryptedBalance, contractAddress: POOL_ADDRESS as `0x${string}` }],
+        [{ handle: encryptedBalance, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` }],
         masterSig.privateKey,
         masterSig.publicKey,
         masterSig.signature,
@@ -333,7 +330,7 @@ export function useSuppliedBalances(
     } finally {
       decryptingRefs.current[tokenSymbol] = false;
     }
-  }, [isConnected, address, walletClient, masterSignature, POOL_ADDRESS, supplyAssets, encryptedBalances, getMasterSignature]);
+  }, [isConnected, address, walletClient, masterSignature, supplyAssets, encryptedBalances, getMasterSignature]);
 
   // Keep ref updated with latest decrypt function
   useEffect(() => {
@@ -409,7 +406,7 @@ export function useSuppliedBalances(
   // Be resilient to brief reserve discovery hiccups: do not wipe state if assets list is momentarily empty.
   useEffect(() => {
     // Must have address, connection and pool to proceed
-    if (!address || !isConnected || !POOL_ADDRESS) {
+    if (!address || !isConnected) {
       setBalances({});
       setEncryptedBalances({});
       lastFetchedAssetsKeyRef.current = '';
@@ -427,7 +424,7 @@ export function useSuppliedBalances(
       lastFetchedAssetsKeyRef.current = supplyAssetsKey;
       fetchAllEncryptedBalances();
     }
-  }, [address, isConnected, POOL_ADDRESS, supplyAssetsKey, fetchAllEncryptedBalances]);
+  }, [address, isConnected, supplyAssetsKey, fetchAllEncryptedBalances]);
 
   // Smart auto-decrypt effect - ONLY decrypt once when master signature is available
   // This EXACTLY matches the pattern from useConfidentialTokenBalance (lines 416-448)

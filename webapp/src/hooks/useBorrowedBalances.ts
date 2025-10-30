@@ -8,7 +8,7 @@ import { useAvailableReserves } from './useAvailableReserves';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
 import { getSepoliaRpcUrls } from '../utils/rpc';
-import { getSafeContractAddresses } from '../config/contractConfig';
+import { CONTRACTS } from '../config/contracts';
 import { rpcCache, generateCacheKey, CACHE_TTL } from '../utils/rpcCache';
 
 // Pool ABI for getUserBorrowedBalance
@@ -66,22 +66,18 @@ export function useBorrowedBalances(
   const lastFetchedAssetsKeyRef = useRef<string>('');
   const decryptBalanceRef = useRef<((symbol: string) => Promise<void>) | null>(null);
 
-  // Contracts
-  const contractAddresses = getSafeContractAddresses();
-  const POOL_ADDRESS = contractAddresses?.POOL_ADDRESS;
-
   /**
    * Fetch encrypted borrowed balance for a single token
    */
   const fetchEncryptedBalance = useCallback(
     async (token: { address: string; symbol: string; decimals: number }) => {
-      if (!address || !POOL_ADDRESS) {
+      if (!address) {
         return null;
       }
 
       // Cache lookup
       const cacheKey = generateCacheKey(
-        POOL_ADDRESS,
+        CONTRACTS.LENDING_POOL,
         'getUserBorrowedBalance',
         [address, token.address],
         address
@@ -120,7 +116,7 @@ export function useBorrowedBalances(
         }
 
         const result = await publicClient.call({
-          to: POOL_ADDRESS as `0x${string}`,
+          to: CONTRACTS.LENDING_POOL as `0x${string}`,
           data: encodeFunctionData({
             abi: POOL_ABI,
             functionName: 'getUserBorrowedBalance',
@@ -140,14 +136,14 @@ export function useBorrowedBalances(
         return null;
       }
     },
-    [address, POOL_ADDRESS]
+    [address]
   );
 
   /**
    * Fetch all encrypted borrowed balances
    */
   const fetchAllEncryptedBalances = useCallback(async () => {
-    if (!address || !POOL_ADDRESS || !borrowAssets || borrowAssets.length === 0) {
+    if (!address || !borrowAssets || borrowAssets.length === 0) {
       setBalances({});
       setEncryptedBalances({});
       return;
@@ -205,20 +201,19 @@ export function useBorrowedBalances(
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [address, POOL_ADDRESS, borrowAssets, fetchEncryptedBalance]);
+  }, [address, borrowAssets, fetchEncryptedBalance]);
 
   /**
    * Decrypt borrowed balance for a specific token
    */
   const decryptBalance = useCallback(
     async (tokenSymbol: string) => {
-      if (!isConnected || !address || !walletClient || !masterSignature || !POOL_ADDRESS) {
+      if (!isConnected || !address || !walletClient || !masterSignature) {
         console.log('Missing requirements for borrowed decryption:', {
           isConnected,
           address,
           walletClient: !!walletClient,
           masterSignature: !!masterSignature,
-          POOL_ADDRESS,
         });
         return;
       }
@@ -268,7 +263,7 @@ export function useBorrowedBalances(
         console.log(`🔓 Decrypting borrowed balance for ${tokenSymbol}...`);
 
         const result = await fheInstance.userDecrypt(
-          [{ handle: encryptedBalance, contractAddress: POOL_ADDRESS as `0x${string}` }],
+          [{ handle: encryptedBalance, contractAddress: CONTRACTS.LENDING_POOL as `0x${string}` }],
           masterSig.privateKey,
           masterSig.publicKey,
           masterSig.signature,
@@ -328,7 +323,6 @@ export function useBorrowedBalances(
       address,
       walletClient,
       masterSignature,
-      POOL_ADDRESS,
       borrowAssets,
       encryptedBalances,
       getMasterSignature,
@@ -384,7 +378,7 @@ export function useBorrowedBalances(
    * Be resilient to brief reserve discovery hiccups: do not wipe state if assets list is momentarily empty.
    */
   useEffect(() => {
-    if (!address || !isConnected || !POOL_ADDRESS) {
+    if (!address || !isConnected) {
       setBalances({});
       setEncryptedBalances({});
       lastFetchedAssetsKeyRef.current = '';
@@ -401,7 +395,7 @@ export function useBorrowedBalances(
       lastFetchedAssetsKeyRef.current = borrowAssetsKey;
       fetchAllEncryptedBalances();
     }
-  }, [address, isConnected, POOL_ADDRESS, borrowAssetsKey, fetchAllEncryptedBalances]);
+  }, [address, isConnected, borrowAssetsKey, fetchAllEncryptedBalances]);
 
   /**
    * Smart auto-decrypt once master signature is available
