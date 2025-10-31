@@ -288,16 +288,16 @@ describe("Phase 1: Deployment & Access Control - ACLManager & SimplePriceOracle"
       expect(pC).to.be.a("bigint");
     });
 
-    it("Should handle zero price setting and fallback to default", async () => {
+    it("Should handle explicit zero price setting (no fallback)", async () => {
       const { oracle, asset1 } = await loadFixture(deployPriceOracleFixture);
 
       await oracle.setPrice(asset1, BigInt(0));
       expect(await oracle.assetPrices(asset1)).to.equal(BigInt(0));
 
-      // getPrice should return default since stored price is zero
+      // When explicitly set to zero, getPrice should return 0 (signals oracle failure)
       const p = await oracle.getPrice(asset1);
       expect(p).to.be.a("bigint");
-      expect(p).to.not.equal(BigInt(0));
+      expect(p).to.equal(BigInt(0));
     });
 
     it("Should handle maximum uint64 price", async () => {

@@ -269,7 +269,10 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         if (!(asset == up.currentDebtAsset || up.currentDebtAsset == address(0))) revert ProtocolErrors.InvalidDebtRepayment();
 
         euint64 payAmount = FHE.fromExternal(amount, inputProof);
-        euint64 userDebt = _userBorrowedBalances[msg.sender][asset];
+        // Avoid touching an uninitialized FHE handle when user has no debt
+        euint64 userDebt = up.currentDebtAsset == asset
+            ? _userBorrowedBalances[msg.sender][asset]
+            : FHE.asEuint64(0);
 
         euint64 safePayAmount;
         

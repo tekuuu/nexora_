@@ -36,6 +36,7 @@ export interface SimplePriceOracleInterface extends Interface {
       | "getConstantPrice"
       | "getDefaultPrice"
       | "getPrice"
+      | "hasExplicitPrice"
       | "isPriceFeed"
       | "owner"
       | "renounceOwnership"
@@ -92,6 +93,10 @@ export interface SimplePriceOracleInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "getPrice",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "hasExplicitPrice",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
@@ -161,6 +166,10 @@ export interface SimplePriceOracleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "getPrice", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "hasExplicitPrice",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "isPriceFeed",
     data: BytesLike
@@ -303,6 +312,8 @@ export interface SimplePriceOracle extends BaseContract {
 
   getPrice: TypedContractMethod<[asset: AddressLike], [bigint], "view">;
 
+  hasExplicitPrice: TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
+
   isPriceFeed: TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
@@ -369,6 +380,9 @@ export interface SimplePriceOracle extends BaseContract {
   getFunction(
     nameOrSignature: "getPrice"
   ): TypedContractMethod<[asset: AddressLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "hasExplicitPrice"
+  ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "isPriceFeed"
   ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;

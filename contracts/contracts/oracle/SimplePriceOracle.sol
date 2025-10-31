@@ -7,6 +7,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract SimplePriceOracle is IPriceOracle, Ownable {
     mapping(address => uint64) public assetPrices;
     mapping(address => bool) public isPriceFeed;
+    // Tracks if a price has been explicitly set via owner/feed. If false, getters may return defaults.
+    mapping(address => bool) public hasExplicitPrice;
 
    
     // These are reasonable defaults for testing/development
@@ -29,6 +31,7 @@ contract SimplePriceOracle is IPriceOracle, Ownable {
 
     function setPrice(address asset, uint64 price) external onlyOwner {
         assetPrices[asset] = price;
+        hasExplicitPrice[asset] = true;
         emit PriceUpdated(asset, price);
     }
 
@@ -39,6 +42,7 @@ contract SimplePriceOracle is IPriceOracle, Ownable {
 
     function updatePrice(address asset, uint64 price) external onlyPriceFeed {
         assetPrices[asset] = price;
+        hasExplicitPrice[asset] = true;
         emit PriceUpdated(asset, price);
     }
 
@@ -81,17 +85,18 @@ contract SimplePriceOracle is IPriceOracle, Ownable {
     }
 
     function getPrice(address asset) external view override returns (uint64) {
-        if (assetPrices[asset] > 0) {
+        // If a price was explicitly set (even zero), return it directly
+        if (hasExplicitPrice[asset]) {
             return assetPrices[asset];
         }
+        // Otherwise, use a default testing value
         return getDefaultPrice(asset);
     }
 
     function getAssetPrice(address asset) external view override returns (uint64) {
-        if (assetPrices[asset] > 0) {
+        if (hasExplicitPrice[asset]) {
             return assetPrices[asset];
         }
-    
         return getDefaultPrice(asset);
     }
 
