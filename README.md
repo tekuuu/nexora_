@@ -690,31 +690,25 @@ Thanks to all contributors and the DeFi community for their support.
 
 ---
 
-## Roadmap
+## Future works
 
 - [ ] Mainnet deployment
-- [ ] Additional token support (WBTC, LINK, etc.)
 - [ ] Advanced DeFi features (flash loans, liquidations)
-- [ ] Mobile app development
 - [ ] Multi-chain support
 - [ ] Governance integration
-- [ ] Professional security audit
+- [ ] security audit
 
 ---
 
 ## FAQ
 
-### How does FHEVM confidentiality work?
-FHEVM uses fully homomorphic encryption to perform computations on encrypted data without decryption, ensuring privacy while maintaining functionality.
-
 ### What are the gas costs?
-Gas costs are higher due to encryption operations. Current estimates: ~2-3x compared to standard DeFi protocols.
-
+.
 ### What networks are supported?
 Currently Sepolia testnet. Mainnet support planned for future releases.
 
 ### Is this production-ready?
-This is experimental technology. Use testnet for evaluation. Mainnet deployment requires professional audit.
+This is experimental technology. Use testnet for evaluation.
 
 ---
 
