@@ -10,7 +10,7 @@
   </defs>
   
   <!-- Background -->
-  <rect width="400" height="200" fill="url(#bg-gradient)" />
+  <rect width="400" height="100" fill="url(#bg-gradient)" />
   
   <!-- Logo and Text Group -->
   
