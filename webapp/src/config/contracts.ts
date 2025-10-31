@@ -45,9 +45,6 @@ export const CONTRACTS = {
   PRICE_ORACLE: getRequiredEnvAddress('PRICE_ORACLE', process.env.PRICE_ORACLE || process.env.NEXT_PUBLIC_PRICE_ORACLE),
   ACL_MANAGER: getRequiredEnvAddress('ACL_MANAGER', process.env.ACL_MANAGER || process.env.NEXT_PUBLIC_ACL_MANAGER),
 
-  // Libraries
-  SUPPLY_LOGIC: getRequiredEnvAddress('NEXT_PUBLIC_SUPPLY_LOGIC', process.env.NEXT_PUBLIC_SUPPLY_LOGIC),
-  BORROW_LOGIC: getRequiredEnvAddress('NEXT_PUBLIC_BORROW_LOGIC', process.env.NEXT_PUBLIC_BORROW_LOGIC),
 } as const;
 
 /**

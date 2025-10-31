@@ -4,24 +4,17 @@
 
 ![Nexora Banner](webapp/public/assets/logos/Nexora_banner_1.svg)
 
-## Badges
 
-### CI/CD Status Badges
-[![Contracts CI](https://github.com/[username]/nexora/workflows/Contracts%20CI/badge.svg)](https://github.com/[username]/nexora/actions/workflows/contracts-ci.yml)
-[![Webapp CI](https://github.com/[username]/nexora/workflows/webapp-ci/badge.svg)](https://github.com/[username]/nexora/actions/workflows/webapp-ci.yml)
-[![Security](https://github.com/[username]/nexora/workflows/Security%20Scanning/badge.svg)](https://github.com/[username]/nexora/actions/workflows/security.yml)
 
-*Note: Replace `[username]` with your actual GitHub username or organization name in the badge URLs.*
-
-### Technology Badges
 ![Solidity](https://img.shields.io/badge/Solidity-^0.8.0-blue)
+![FHEVM](https://img.shields.io/badge/FHEVM-v0.8.0-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.4-black)
 ![Node.js](https://img.shields.io/badge/Node.js-20+-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-### Deployment Badge
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/[username]/nexora)
+### Deployment
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-View%20Site-blue)](https://nexora-sooty-alpha.vercel.app/)
 
 ---
 
@@ -51,11 +44,7 @@
 
 ## About
 
-Nexora is a confidential lending platform that enables privacy-preserving DeFi operations. Built on FHEVM (Fully Homomorphic Encryption Virtual Machine) by Zama, Nexora allows users to supply, borrow, and manage assets without revealing sensitive financial information on-chain.
-
-The platform features a monorepo structure with smart contracts developed in Solidity using Hardhat and a modern Next.js 15 frontend. This innovative approach ensures that user balances, transaction amounts, and collateral positions remain encrypted throughout the lending process, providing unprecedented privacy in DeFi.
-
-Nexora targets DeFi users and developers interested in privacy-preserving protocols, offering a secure alternative to traditional lending platforms where financial data is publicly visible.
+Nexora is a next-generation confidential lending platform that brings true financial privacy to decentralized finance. Built on [FHEVM](https://github.com/zama-ai/fhevm) (Fully Homomorphic Encryption Virtual Machine) by [Zama](https://www.zama.ai/), Nexora enables users to supply collateral, borrow assets, and manage their positions without exposing sensitive financial data on-chain.
 
 ---
 
@@ -65,7 +54,8 @@ Nexora targets DeFi users and developers interested in privacy-preserving protoc
 - **Private Asset Balances**: Uses encrypted types (euint64) to keep balances hidden
 - **Confidential Supply and Borrow Amounts**: Transaction values remain encrypted on-chain
 - **Hidden Collateral Positions**: Users' collateral status is not publicly visible
-- **Encrypted Interest Rate Calculations**: Interest computations preserve privacy
+- **Confidential Repayment Amounts**: Repayment transactions maintain privacy
+- **Private Withdrawal Amounts**: Withdrawal values are kept encrypted
 
 ### Core Lending Features 💰
 - **Multi-Asset Support**: Supports USDC, DAI, and WETH
@@ -73,6 +63,7 @@ Nexora targets DeFi users and developers interested in privacy-preserving protoc
 - **Dynamic Interest Rates**: Adaptive rates based on supply/demand
 - **Liquidation Protection**: Safeguards against under-collateralization
 - **Price Oracle Integration**: Real-time price feeds for accurate valuations
+- **Token Swapping**: Confidential token exchange functionality
 
 ### User Interface 🎨
 - **Modern Material-UI Design**: Clean, responsive interface
@@ -143,7 +134,7 @@ The user interface is built with modern web technologies:
 
 ### Recommended Tools
 - **VS Code or similar IDE** - For development
-- **MetaMask or compatible Web3 wallet** - For blockchain interactions
+- **Rabby wallet is highely recommended for smooth interaction** - For blockchain interactions
 - **Hardhat extension for VS Code** - For smart contract development
 
 ### Accounts and Keys
@@ -271,10 +262,12 @@ npm run compile
 This generates artifacts and TypeChain types for TypeScript integration.
 
 ### Run Tests
+Run tests before deployment to ensure everything works correctly:
+
 ```bash
+npm run test:unit         # Unit tests (run locally)
+npm run test:integration  # Integration tests (requires Sepolia network)
 npm run test              # All tests
-npm run test:unit         # Unit tests only
-npm run test:integration  # Integration tests (requires Sepolia)
 ```
 
 ### Run Linting
@@ -285,10 +278,20 @@ npm run lint              # All linting
 ```
 
 ### Deploy Contracts
+Deploy contracts in the correct order:
+
 ```bash
-npx hardhat deploy --network sepolia
+# 1. Deploy confidential tokens
+npx hardhat deploy --tags tokens --network sepolia
+
+# 2. Deploy lending protocol
+npx hardhat deploy --network sepolia --tags ModularLending --reset
+
+# 3. Deploy token swapper
+npx hardhat deploy --tags swapper --network sepolia
 ```
-Deployment scripts are located in `contracts/deploy/` and run in order: `tokens.ts`, `modular-lending.ts`, `swapper.ts`.
+
+**Note**: Deployment scripts are located in `contracts/deploy/` and must be run in the specified order.
 
 ### Verify Contracts
 ```bash
@@ -328,12 +331,28 @@ cp env.example .env.local
 Configure required variables in `.env.local`:
 
 ```env
+# Network Configuration
 NEXT_PUBLIC_CHAIN_ID=11155111
 NEXT_PUBLIC_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
-NEXT_PUBLIC_LENDING_POOL_ADDRESS=0x...
-NEXT_PUBLIC_POOL_CONFIGURATOR_ADDRESS=0x...
-NEXT_PUBLIC_ACL_MANAGER_ADDRESS=0x...
-NEXT_PUBLIC_PRICE_ORACLE_ADDRESS=0x...
+
+# Standard Tokens
+NEXT_PUBLIC_WETH=0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9
+NEXT_PUBLIC_USDC=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+NEXT_PUBLIC_DAI=0x75236711d42D0f7Ba91E03fdCe0C9377F5b76c07
+
+# Confidential Tokens
+# Confidential ERC7984 token addresses deployed on Sepolia.
+NEXT_PUBLIC_CONFIDENTIAL_WETH=0x4166b48d16e0DC31B10D7A1247ACd09f01632cBC
+NEXT_PUBLIC_CONFIDENTIAL_USDC=0xc323ccD9FcD6AfC3a0D568E4a6E522c41aEE04C4
+NEXT_PUBLIC_CONFIDENTIAL_DAI=0xd57a787BfDb9C86c0B1E0B5b7a316f8513F2E0D1
+
+# Protocol Contracts
+# Core lending protocol contract addresses deployed on Sepolia.
+NEXT_PUBLIC_TOKEN_SWAPPER=0xD662eC4370081be9d7Fca9599ad3E8f60235e7d9
+NEXT_PUBLIC_LENDING_POOL=0xc24bA6c1958EEB0B33778c7eF864d71F9B1094De
+NEXT_PUBLIC_POOL_CONFIGURATOR=0xF78b2ed527854458Bd1119e43a01101CE5a08CF2
+NEXT_PUBLIC_PRICE_ORACLE=0x0B8F2b631b6DfBd97695FBF672B18c3A9941E5cD
+NEXT_PUBLIC_ACL_MANAGER=0xC9576182dBAbd04d441D7ac948062634CA99549A
 ```
 
 Find deployed contract addresses in `contracts/deployments/sepolia/`.
