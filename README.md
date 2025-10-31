@@ -13,9 +13,6 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-### Deployment
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-View%20Site-blue)](https://nexora-sooty-alpha.vercel.app/)
-
 ---
 
 ## Table of Contents
@@ -64,6 +61,20 @@ Nexora is a next-generation confidential lending platform that brings true finan
 - **Liquidation Protection**: Safeguards against under-collateralization
 - **Price Oracle Integration**: Real-time price feeds for accurate valuations
 - **Token Swapping**: Confidential token exchange functionality
+
+### Current Protocol Behavior & Limitations ⚠️
+
+This project is an early-stage, privacy-first lending prototype. To keep the initial implementation focused and functional, several behavioral constraints and simplifications are in place. These are deliberate design/implementation limits and will be expanded in future work.
+
+- **Supply:** Users can supply any supported asset to the protocol. Only Confidential WETH (cWETH) may be enabled as collateral.
+- **Withdraw:** Withdrawing cWETH (the collateral asset) triggers a health check on the user's position. If the withdrawal would make the position unhealthy (under-collateralized), the withdrawal is denied. Non-collateral assets may be withdrawn without a health check.
+- **Borrow:** A user may have at most one borrowed asset at a time. To borrow a different asset the user must fully repay their existing borrowed asset first.
+- **Repay:** When repaying the full outstanding balance of a borrowed asset, the user must select the "Repay All Debt" option (or equivalent) to clear the debt slot and allow borrowing another asset.
+- **Interest & Liquidation:** There is currently no interest accrual (supply APY = 0%, borrow APY = 0%) and no liquidation mechanism implemented. These are intentionally omitted in this phase to keep the protocol simple and focused on confidential accounting.
+- **HCU Limit:** HCU here refers to Homomorphic Computation Unit — the computation budget unit used by Zama's FHEVM. The prototype enforces HCU caps as part of a simplified safety and performance model (for example, a per-transaction sequential budget on the order of ~5,000,000 HCU and a global budget on the order of ~20,000,000 HCU). These limits make certain confidential computations and multi-asset operations challenging. We are actively researching and developing innovative optimizations (batching, algorithmic reductions, and approximate/cheaper homomorphic patterns) to minimize HCU consumption and enable richer protocol features in future releases.
+- **Price Oracle:** For the sake of simplicity and testing, the protocol currently uses a fixed/static price oracle. Production deployments should replace this with a live/secure price feed.
+
+These limitations are intentional. The roadmap includes implementing interest rate models, liquidation logic, multi-asset borrow support, and tunable HCU parameters. See the "Future works" section for planned improvements.
 
 ### User Interface 🎨
 - **Modern Material-UI Design**: Clean, responsive interface
@@ -120,7 +131,7 @@ The user interface is built with modern web technologies:
 
 ### Deployment
 - **Smart Contracts**: Deployed on Sepolia testnet
-- **Frontend**: Hosted on Vercel with automatic deployments
+- **Frontend**: Hosted with automatic deployments (see `webapp/` docs for hosting options)
 - **FHEVM Gateway**: Integrated for encrypted operations
 
 ---
@@ -134,7 +145,7 @@ The user interface is built with modern web technologies:
 
 ### Recommended Tools
 - **VS Code or similar IDE** - For development
-- **Rabby wallet is highely recommended for smooth interaction** - For blockchain interactions
+- **Rabby wallet is highly recommended for smooth interaction** - For blockchain interactions
 - **Hardhat extension for VS Code** - For smart contract development
 
 ### Accounts and Keys
@@ -357,48 +368,8 @@ NEXT_PUBLIC_ACL_MANAGER=0xC9576182dBAbd04d441D7ac948062634CA99549A
 
 Find deployed contract addresses in `contracts/deployments/sepolia/`.
 
-### Run Development Server
-```bash
-npm run dev               # Standard mode
-npm run dev:fast          # Turbo mode (faster)
-npm run dev:debug         # Debug mode
-```
-Application runs on `http://localhost:3000`.
-
-### Build for Production
-```bash
-npm run build
-```
-Creates optimized production build in `.next/`.
-
-### Run Production Server
-```bash
-npm run start
-```
-Requires build step first.
-
-### Run Linting
-```bash
-npm run lint
-```
-
-### Type-Check TypeScript
-```bash
-npx tsc --noEmit
-```
-
-### Available Scripts
-- `dev` - Start development server
-- `build` - Build for production
-- `start` - Start production server
-- `lint` - Lint code with ESLint
-
----
-
-## Development Workflow
-
-### Branch Strategy
-- `main` - Production-ready code
+### Webapp deployment
+Webapp hosting and CI/CD instructions are maintained in the `webapp/` folder. Vercel-specific instructions have been omitted from this top-level README to keep this document focused; see `webapp/README.md` (or the `webapp/` deployment docs) for hosting and environment variable details.
 - `develop` - Development branch
 - `feature/feature-name` - Feature branches
 - `bugfix/bug-name` - Bugfix branches
@@ -528,48 +499,15 @@ Frontend testing framework setup is a future enhancement. Can be added using:
 - Grant necessary roles via ACL Manager
 - Test all contract functions
 
-### Webapp Deployment (Vercel)
-
-#### Prerequisites
-- Vercel account
-- GitHub repository connected to Vercel
-
-#### Automatic Deployment
-- Push to `main` branch triggers production deployment
-- Push to other branches creates preview deployments
-- Vercel automatically detects Next.js and builds
-
-#### Manual Deployment
-```bash
-cd webapp
-npm run build
-vercel --prod
-```
-
-#### Environment Variables
-- Configure in Vercel dashboard under Settings → Environment Variables
-- Add all variables from `.env.local`
-- Separate variables for Production, Preview, and Development
-
-#### Vercel Configuration
-- Configuration in `vercel.json` at root
-- Points to `webapp/` directory
-- Uses `@vercel/next` builder
-
-#### Custom Domain
-- Add custom domain in Vercel dashboard
-- Configure DNS records
-- SSL automatically provisioned
-
 ### Deployment Checklist
-- ✅ Smart contracts deployed and verified
-- ✅ Contract addresses updated in webapp config
-- ✅ Environment variables configured in Vercel
-- ✅ Webapp deployed and accessible
-- ✅ Wallet connection working
-- ✅ All features tested on production
-- ✅ Security scan passed
-- ✅ Documentation updated
+ - ✅ Smart contracts deployed and verified
+ - ✅ Contract addresses updated in webapp config
+ - ✅ Environment variables configured
+ - ✅ Webapp deployed and accessible
+ - ✅ Wallet connection working
+ - ✅ All features tested on production
+ - ✅ Security scan passed
+ - ✅ Documentation updated
 
 ---
 
@@ -690,20 +628,35 @@ Thanks to all contributors and the DeFi community for their support.
 
 ---
 
-## Future works
+## Roadmap
 
+We intentionally kept the initial implementation focused and limited some functionality to simplify development and testing (see "Current Protocol Behavior & Limitations"). The roadmap below prioritizes work required to remove current prototype constraints and prepare the protocol for production.
+
+Protocol mechanics (near-term)
+- [ ] Interest rate models — implement supply/borrow interest accrual and configurable rate strategies
+- [ ] Liquidation engine — add automated liquidation mechanisms, monitoring, and configurable penalties
+- [ ] Multi-asset borrowing — lift the single-asset borrow restriction so users may maintain multiple borrow positions
+
+Performance & privacy (HCU-focused)
+- [ ] Tunable HCU parameters — expose configuration and on-chain guards for Homomorphic Computation Unit budgets
+- [ ] HCU optimizations — reduce HCU usage via batching, algorithmic transformations, and lower-cost homomorphic patterns
+
+Infrastructure & production readiness
+- [ ] Replace fixed/static price oracle with secure, live price feeds and/or aggregated oracles
 - [ ] Mainnet deployment
-- [ ] Advanced DeFi features (flash loans, liquidations)
 - [ ] Multi-chain support
 - [ ] Governance integration
-- [ ] security audit
+- [ ] Security audit and formal verification
+
+Advanced features (post-production)
+- [ ] Flash loans and other advanced DeFi primitives
 
 ---
 
 ## FAQ
 
 ### What are the gas costs?
-.
+Gas costs depend on the network and the complexity of confidential/FHE operations. Because FHEVM computations add extra cost, expect higher gas usage compared to equivalent non-confidential contracts. For deployment and detailed benchmarks, see the `contracts/` folder and test/deployment scripts.
 ### What networks are supported?
 Currently Sepolia testnet. Mainnet support planned for future releases.
 

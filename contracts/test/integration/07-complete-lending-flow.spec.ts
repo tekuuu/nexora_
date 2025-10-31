@@ -108,7 +108,8 @@ describe("Phase 7 — Sepolia Integration: Complete Lending Flows", function () 
 
       // Step 1 - Supply Collateral
       const { result: supplyTx } = await measureOperationTiming("supply", async () => {
-        const enc = await createEncryptedAmount(cETH, await borrower.getAddress(), INTEGRATION_COLLATERAL_AMOUNT);
+        // IMPORTANT: encrypt for the pool contract, not the token
+        const enc = await createEncryptedAmount(poolAddress, await borrower.getAddress(), INTEGRATION_COLLATERAL_AMOUNT);
         const tx = await pool.connect(borrower).supply(cETH, enc.handle, enc.inputProof);
         await waitForTransactionConfirmation(tx.hash, 2, TIMEOUT_SUPPLY_SEPOLIA);
         return tx;
@@ -148,7 +149,8 @@ describe("Phase 7 — Sepolia Integration: Complete Lending Flows", function () 
 
       // Step 3 - Borrow Against Collateral
       const { result: borrowTx } = await measureOperationTiming("borrow", async () => {
-        const enc = await createEncryptedAmount(borrowAsset, await borrower.getAddress(), INTEGRATION_BORROW_AMOUNT);
+        // IMPORTANT: encrypt for the pool contract, not the token
+        const enc = await createEncryptedAmount(poolAddress, await borrower.getAddress(), INTEGRATION_BORROW_AMOUNT);
         const tx = await pool.connect(borrower).borrow(borrowAsset, enc.handle, enc.inputProof);
         await waitForTransactionConfirmation(tx.hash, 2, TIMEOUT_BORROW_SEPOLIA);
         const rcpt = await tx.wait?.();
@@ -181,7 +183,8 @@ describe("Phase 7 — Sepolia Integration: Complete Lending Flows", function () 
 
       // Step 4 - Partial Repayment
       const { result: repayPartialTx } = await measureOperationTiming("repay-partial", async () => {
-        const enc = await createEncryptedAmount(borrowAsset, await borrower.getAddress(), INTEGRATION_REPAY_AMOUNT);
+        // IMPORTANT: encrypt for the pool contract, not the token
+        const enc = await createEncryptedAmount(poolAddress, await borrower.getAddress(), INTEGRATION_REPAY_AMOUNT);
         const tx = await pool.connect(borrower).repay(borrowAsset, enc.handle, enc.inputProof, false);
         await waitForTransactionConfirmation(tx.hash, 2, TIMEOUT_REPAY_SEPOLIA);
         return tx;
@@ -200,7 +203,8 @@ describe("Phase 7 — Sepolia Integration: Complete Lending Flows", function () 
 
       // Step 5 - Full Repayment
       const { result: repayAllTx } = await measureOperationTiming("repay-all", async () => {
-        const enc = await createEncryptedAmount(borrowAsset, await borrower.getAddress(), INTEGRATION_BORROW_AMOUNT);
+        // IMPORTANT: encrypt for the pool contract, not the token
+        const enc = await createEncryptedAmount(poolAddress, await borrower.getAddress(), INTEGRATION_BORROW_AMOUNT);
         const tx = await pool.connect(borrower).repay(borrowAsset, enc.handle, enc.inputProof, true);
         await waitForTransactionConfirmation(tx.hash, 2, TIMEOUT_REPAY_SEPOLIA);
         return tx;
@@ -217,7 +221,8 @@ describe("Phase 7 — Sepolia Integration: Complete Lending Flows", function () 
 
       // Step 6 - Withdraw Collateral
       const { result: withdrawTx } = await measureOperationTiming("withdraw", async () => {
-        const enc = await createEncryptedAmount(cETH, await borrower.getAddress(), INTEGRATION_COLLATERAL_AMOUNT);
+        // IMPORTANT: encrypt for the pool contract, not the token
+        const enc = await createEncryptedAmount(poolAddress, await borrower.getAddress(), INTEGRATION_COLLATERAL_AMOUNT);
         const tx = await pool.connect(borrower).withdraw(cETH, enc.handle, enc.inputProof);
         await waitForTransactionConfirmation(tx.hash, 2, TIMEOUT_WITHDRAW_SEPOLIA);
         return tx;
