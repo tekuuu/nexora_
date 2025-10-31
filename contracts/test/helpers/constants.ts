@@ -107,3 +107,26 @@ export const GAS_LIMIT_TOKEN_MINT = 3_000_000n;
 export const TEST_USER_1_INDEX = 0;
 export const TEST_USER_2_INDEX = 1;
 export const TEST_USER_3_INDEX = 2;
+
+// Phase 5: Collateral Management testing constants
+// Collateral toggle boolean flags
+export const COLLATERAL_ENABLED = true;
+export const COLLATERAL_DISABLED = false;
+
+// Collateral state markers for mapping checks
+export const USER_HAS_NO_COLLATERAL = false;
+export const USER_HAS_COLLATERAL = true;
+
+// Test scenario amounts (6 decimals)
+export const COLLATERAL_SUPPLY_AMOUNT = 5000n * 10n ** 6n; // 5,000 tokens
+export const COLLATERAL_WITHDRAW_SAFE = 1000n * 10n ** 6n; // 1,000 tokens
+export const COLLATERAL_WITHDRAW_UNSAFE = 4500n * 10n ** 6n; // 4,500 tokens
+
+// Error message identifiers (custom errors in ConfidentialLendingPool)
+export const ERROR_NOT_DESIGNATED_COLLATERAL = "NotTheDesignatedCollateral";
+export const ERROR_RESERVE_NOT_COLLATERAL = "ReserveNotCollateral";
+export const ERROR_PROTOCOL_PAUSED = "ProtocolPaused";
+export const ERROR_RESERVE_NOT_ACTIVE = "ReserveNotActive";
+
+// Event name identifiers
+export const EVENT_USER_COLLATERAL_CHANGED = "UserCollateralChanged";
