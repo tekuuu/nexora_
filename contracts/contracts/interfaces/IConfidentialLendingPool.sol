@@ -27,7 +27,8 @@ interface IConfidentialLendingPool {
     function repay(
         address asset,
         externalEuint64 amount,
-        bytes calldata inputProof
+        bytes calldata inputProof,
+        bool isRepayingAll
     ) external;
 
     // Per-user collateral toggle

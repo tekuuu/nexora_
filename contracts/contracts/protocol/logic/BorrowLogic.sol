@@ -2,8 +2,8 @@
 pragma solidity ^0.8.27;
 
 import {Types} from "../../libraries/Types.sol";
-import {Errors} from "../../libraries/Errors.sol";
-import {Constants} from "../../config/Constants.sol"; 
+import {ProtocolErrors} from "../../libraries/Errors.sol";
+import {Constants} from "../../config/Constants.sol";
 import {SafeFHEOperations} from "../../libraries/SafeFHEOperations.sol"; 
 import {SafeMath64} from "../../libraries/SafeMath64.sol";
 import {ConfidentialFungibleToken} from "@openzeppelin/confidential-contracts/token/ConfidentialFungibleToken.sol";
@@ -17,7 +17,6 @@ import {FHE, euint64, ebool, externalEuint64} from "@fhevm/solidity/lib/FHE.sol"
 library BorrowLogic {
     using FHE for euint64;
     using FHE for ebool;
-    using FHE for euint128; // Needed for intermediate calculations
     using SafeFHEOperations for euint64;
     using SafeMath64 for uint64;
 
@@ -40,10 +39,10 @@ library BorrowLogic {
         Types.ConfidentialUserPosition storage userPosition,
         address user
     ) external returns (euint64 newUserBorrowBalance) {
-        require(reserve.active, Errors.RESERVE_NOT_ACTIVE);
-        require(reserve.borrowingEnabled, Errors.BORROWING_NOT_ENABLED);
-        require(!reserve.isPaused, Errors.PROTOCOL_PAUSED);
-        require(asset != address(0), Errors.ZERO_ADDRESS);
+        if (!reserve.active) revert ProtocolErrors.ReserveNotActive();
+        if (!reserve.borrowingEnabled) revert ProtocolErrors.BorrowingNotEnabled();
+        if (reserve.isPaused) revert ProtocolErrors.ProtocolPaused();
+        if (asset == address(0)) revert ProtocolErrors.ZeroAddress();
 
         euint64 liquidityCappedAmount = amount.validateAndCap(reserve.availableLiquidity);
 
@@ -96,8 +95,8 @@ library BorrowLogic {
         Types.ConfidentialReserve storage reserve,
         euint64 userBorrowBalance
     ) external returns (euint64 newUserBorrowBalance) {
-        require(reserve.active, Errors.RESERVE_NOT_ACTIVE);
-        require(asset != address(0), Errors.ZERO_ADDRESS);
+        if (!reserve.active) revert ProtocolErrors.ReserveNotActive();
+        if (asset == address(0)) revert ProtocolErrors.ZeroAddress();
 
         FHE.allowTransient(payAmount, asset);
         ConfidentialFungibleToken(asset).confidentialTransferFrom(

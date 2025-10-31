@@ -1,0 +1,23 @@
+<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-labelledby="logoTitle">
+  <title id="logoTitle">Nexora 'N' Logo (Geometric)</title>
+  
+  <!-- 
+    This path creates a single, solid, bold 'N' shape.
+    It's designed to be strong and minimalist, like the X.com logo.
+    The 'Z' at the end closes the path.
+  -->
+  <path d="M 15 10 
+           L 15 90 
+           L 35 90 
+           L 75 25 
+           L 75 90 
+           L 95 90 
+           L 95 10 
+           L 75 10 
+           L 35 75 
+           L 35 10 
+           L 15 10 Z" 
+        fill="#000000" />
+</svg>
+
+

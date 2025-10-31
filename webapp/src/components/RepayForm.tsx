@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useWalletClient } from 'wagmi';
+import { createPublicClient, http, encodeFunctionData } from 'viem';
+import { sepolia } from 'wagmi/chains';
 import { POOL_ABI } from '../config/poolABI';
 import { getFHEInstance } from '../utils/fhe';
 import { CONTRACTS } from '../config/contracts';
+import { ethers } from 'ethers';
+import { getSepoliaRpcUrl } from '../utils/rpc';
 import {
   Box,
   TextField,
@@ -15,14 +19,115 @@ import {
   Card,
   CardContent,
   Divider,
+  FormControlLabel,
+  Checkbox,
   useTheme,
+  Chip,
 } from '@mui/material';
 import { Close } from '@mui/icons-material';
 import { useGasFee } from '../hooks/useGasFee';
 import { parseTransactionError } from '../utils/errorHandling';
 
+const CTOKEN_ABI = [
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getEncryptedBalance",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "internalType": "uint48",
+        "name": "until",
+        "type": "uint48"
+      }
+    ],
+    "name": "setOperator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "internalType": "externalEuint64",
+        "name": "encryptedAmount",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "inputProof",
+        "type": "bytes"
+      }
+    ],
+    "name": "confidentialTransferFrom",
+    "outputs": [
+      {
+        "internalType": "euint64",
+        "name": "transferred",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "isOperator",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+] as const;
+
 interface RepayFormProps {
-  onTransactionSuccess?: () => void;
+  onTransactionSuccess?: () => Promise<void>;
   onClose?: () => void;
   selectedAsset?: {
     address: string;
@@ -33,6 +138,9 @@ interface RepayFormProps {
   borrowedBalance?: string;
   hasBorrowed?: boolean;
   isDecrypted?: boolean;
+  walletBalance?: string;
+  hasWalletBalance?: boolean;
+  isWalletBalanceDecrypted?: boolean;
 }
 
 export default function RepayForm({
@@ -42,6 +150,9 @@ export default function RepayForm({
   borrowedBalance: propBorrowedBalance,
   hasBorrowed: propHasBorrowed,
   isDecrypted: propIsDecrypted,
+  walletBalance: propWalletBalance,
+  hasWalletBalance: propHasWalletBalance,
+  isWalletBalanceDecrypted: propIsWalletBalanceDecrypted,
 }: RepayFormProps = {}) {
   const { address, isConnected } = useAccount();
   const theme = useTheme();
@@ -54,13 +165,21 @@ export default function RepayForm({
   const [transactionError, setTransactionError] = useState<string | null>(null);
   const [userCancelled, setUserCancelled] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRepayingAll, setIsRepayingAll] = useState(false);
+  const [submittedAmount, setSubmittedAmount] = useState('');
+  const [submittedRepayAll, setSubmittedRepayAll] = useState(false);
+  const [insufficientWalletFunds, setInsufficientWalletFunds] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
+  const [transactionPhase, setTransactionPhase] = useState<null | 'operator-approval' | 'repay'>(null);
+  const [pendingRepayAmount, setPendingRepayAmount] = useState<string | null>(null);
 
   const handleClose = useCallback(() => {
     if (onClose) onClose();
   }, [onClose]);
 
-  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+  const { writeContract, data: hash, isPending, error: writeError, reset: resetWrite } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { data: walletClient } = useWalletClient();
 
 
   const POOL_ADDRESS = (CONTRACTS.LENDING_POOL) as `0x${string}`;
@@ -78,51 +197,257 @@ export default function RepayForm({
   const hasBorrowed = propHasBorrowed || false;
   const isDecrypted = propIsDecrypted || false;
 
+  // Use props for wallet balance
+  const walletBalance = propWalletBalance || '••••••••';
+  const hasWalletBalance = propHasWalletBalance || false;
+  const isWalletBalanceDecrypted = propIsWalletBalanceDecrypted || false;
+
+  // Function to check if pool is operator
+  const checkOperatorStatus = useCallback(async () => {
+    console.log('checkOperatorStatus called with:', { address, assetAddress: asset.address, poolAddress: CONTRACTS.LENDING_POOL });
+    
+    if (!address || !asset.address) {
+      console.log('Missing required parameters for checkOperatorStatus');
+      return;
+    }
+
+    try {
+      console.log('Creating public client for operator check...');
+      
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(getSepoliaRpcUrl()),
+      });
+
+      console.log('Calling isOperator function...');
+      
+      // Safety check for publicClient
+      if (!publicClient || typeof publicClient.call !== 'function') {
+        console.error('❌ publicClient is not properly initialized in RepayForm');
+        throw new Error('Public client not properly initialized');
+      }
+      
+      const result = await publicClient.call({
+        to: asset.address as `0x${string}`,
+        data: encodeFunctionData({
+          abi: CTOKEN_ABI,
+          functionName: 'isOperator',
+          args: [address as `0x${string}`, CONTRACTS.LENDING_POOL as `0x${string}`],
+        }),
+      });
+
+      console.log('isOperator result:', result.data);
+      
+      if (result.data && result.data !== '0x') {
+        const isOperator = result.data === '0x0000000000000000000000000000000000000000000000000000000000000001';
+        console.log('Setting isApproved to:', isOperator);
+        setIsApproved(isOperator);
+        console.log('Is vault operator:', isOperator);
+      } else {
+        console.log('No data returned from isOperator call');
+      }
+    } catch (error) {
+      console.error('Failed to check operator status:', error);
+      setIsApproved(false);
+    }
+  }, [address, asset.address]);
+
+  // Check operator status when amount changes
+  useEffect(() => {
+    if (amount && parseFloat(amount) > 0) {
+      checkOperatorStatus();
+    }
+  }, [amount, checkOperatorStatus]);
+
   // Handle successful transaction
   useEffect(() => {
-    if (isSuccess && hash) {
+    console.log('Transaction success effect triggered:', { 
+      isSuccess, 
+      isReceiptError: false, // No isReceiptError in this component
+      isApproved, 
+      hash,
+      error: writeError?.message,
+      transactionPhase
+    });
+    
+    if (isSuccess && transactionPhase === 'operator-approval') {
+      // Operator permission was successful, now check operator status
+      console.log('Operator permission successful, checking status...');
+      setTimeout(() => {
+        console.log('Calling checkOperatorStatus...');
+        checkOperatorStatus();
+      }, 2000); // Wait 2 seconds for the transaction to be mined
+      // After approval receipt, if we had a pending amount, auto-repay it
+      if (pendingRepayAmount) {
+        setTimeout(() => {
+          console.log('Auto-repaying after operator approval with amount:', pendingRepayAmount);
+          performRepay(pendingRepayAmount).catch((e) => console.error('Auto-repay failed:', e));
+          setPendingRepayAmount(null);
+        }, 2500);
+      }
+      setTransactionPhase(null);
+    } else if (isSuccess && transactionPhase === 'repay') {
+      // This is the repay transaction success
       console.log('✅ Repay transaction successful!');
       setShowSuccess(true);
+      setTransactionPhase(null);
       setAmount('');
-      setIsValidAmount(false);
+      // DON'T reset isApproved here - operator permission persists!
       setTransactionError(null);
       setUserCancelled(false);
-
-      // Call onTransactionSuccess to refresh balances in Dashboard
-      if (onTransactionSuccess) {
-        onTransactionSuccess();
-      }
-
-      // Hide success message and close form after 5 seconds
+      
+      // Reset the write contract state to clear pending states
       setTimeout(() => {
-        setShowSuccess(false);
-        if (onClose) onClose();
-      }, 5000);
+        resetWrite();
+      }, 100);
+      
+      setTimeout(() => setShowSuccess(false), 5000);
+      
+      // Refresh all dashboard balances
+      if (onTransactionSuccess) {
+        console.log('🔄 Refreshing dashboard balances after repay...');
+        onTransactionSuccess().catch((error) => {
+          console.error('Error refreshing balances:', error);
+        });
+      }
     }
-  }, [isSuccess, hash, onTransactionSuccess]);
+  }, [isSuccess, checkOperatorStatus, hash, writeError, onTransactionSuccess, resetWrite, transactionPhase, pendingRepayAmount]);
 
   // Handle write errors
   useEffect(() => {
     if (writeError) {
       console.log('Transaction error:', writeError);
-
+      
       // Check if user rejected the transaction
       if (writeError.message.toLowerCase().includes('user rejected') ||
           writeError.message.toLowerCase().includes('user denied') ||
           writeError.message.toLowerCase().includes('rejected the request')) {
         setUserCancelled(true);
         setTransactionError(null);
+        setTransactionPhase(null);
         setAmount(''); // Clear input on cancellation
       } else {
         // Other errors (network, contract, etc.)
         setTransactionError(parseTransactionError(writeError));
         setUserCancelled(false);
+        setTransactionPhase(null);
         setAmount(''); // Clear input on error
       }
+      
+      // Reset the write contract state to clear pending states
+      setTimeout(() => {
+        resetWrite();
+      }, 100);
+    }
+  }, [writeError, resetWrite]);
 
+  const performRepay = async (repayAmount: string) => {
+    if (!repayAmount || !address || !walletClient) return;
+    setTransactionPhase('repay');
+    try {
+      // Convert to token units based on decimals
+      const amountFloat = parseFloat(repayAmount);
+      if (Number.isNaN(amountFloat) || amountFloat <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      const decimals = asset.decimals ?? 18;
+      const amountInWei = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+
+      // Prepare FHE encrypted input bound to Pool
+      const fheInstance = await getFHEInstance();
+
+      const input = (fheInstance as any).createEncryptedInput(
+        POOL_ADDRESS as `0x${string}`,
+        address as `0x${string}`
+      );
+
+      // Always use add64 to match Pool expectation (euint64)
+      input.add64(amountInWei);
+
+      // Encrypt
+      const encryptedAmount = await input.encrypt();
+
+      // Normalize encrypted payload
+      const formattedEncryptedAmount = toHex(encryptedAmount.handles?.[0]);
+      const formattedInputProof = toHex(encryptedAmount.inputProof);
+
+      // Preflight simulation: attempt a callStatic to detect reverts before sending tx
+      try {
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const iface = new ethers.Interface(POOL_ABI as any);
+        const data = iface.encodeFunctionData('repay', [asset.address, formattedEncryptedAmount, formattedInputProof, isRepayingAll]);
+        // Perform an eth_call simulation which will revert if the contract would revert
+        await provider.call({ to: POOL_ADDRESS as string, data, from: address });
+      } catch (simErr: any) {
+        console.error('Preflight repay simulation failed:', simErr);
+        setTransactionError(parseTransactionError(simErr) || 'Preflight simulation failed; transaction would revert.');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Submit repay txn
+      writeContract({
+        address: CONTRACTS.LENDING_POOL as `0x${string}`,
+        abi: POOL_ABI,
+        functionName: 'repay',
+        args: [
+          asset.address as `0x${string}`,
+          formattedEncryptedAmount,
+          formattedInputProof,
+          isRepayingAll,
+        ],
+        gas: BigInt(800000),
+        gasPrice: gasPrice ?? undefined,
+      });
+    } catch (err: any) {
+      console.error('Repay error:', err);
+      setTransactionError(parseTransactionError(err));
       setIsProcessing(false);
     }
-  }, [writeError]);
+  };
+
+  const handleRepay = async () => {
+    if (!isValidAmount || !amount || !address || !walletClient) return;
+
+    // Clear previous error states when starting new transaction
+    setTransactionError(null);
+    setUserCancelled(false);
+    setBalanceError(null);
+
+    try {
+      if (!isApproved) {
+        // Step 1: Set vault as operator (time-limited permission)
+        console.log('Step 1: Setting vault as operator...');
+        setTransactionPhase('operator-approval');
+        const until = Math.floor(Date.now() / 1000) + 3600; // Current timestamp + 1 hour
+        console.log('setOperator parameters:', {
+          address: asset.address,
+          poolAddress: CONTRACTS.LENDING_POOL,
+          until: until,
+          untilType: typeof until
+        });
+        try {
+          writeContract({
+            address: asset.address as `0x${string}`,
+            abi: CTOKEN_ABI,
+            functionName: 'setOperator',
+            args: [CONTRACTS.LENDING_POOL as `0x${string}`, until],
+          });
+          console.log('Operator permission initiated...');
+        } catch (writeError) {
+          console.error('writeContract error:', writeError);
+          throw writeError;
+        }
+        // Remember desired repay amount to auto-repay after approval
+        setPendingRepayAmount(amount);
+      } else {
+        await performRepay(amount);
+      }
+    } catch (err) {
+      console.error('Transaction failed:', err);
+    }
+  };
 
   // Calculate total cost including real network fee
   const calculateTotalCost = (): string => {
@@ -151,6 +476,30 @@ export default function RepayForm({
     }
   };
 
+  const handleRepayAllChange = (checked: boolean) => {
+    setIsRepayingAll(checked);
+    if (checked) {
+      if (isDecrypted && isWalletBalanceDecrypted && borrowedBalance.includes(asset.symbol) && walletBalance.includes(asset.symbol)) {
+        const borrowedValue = parseFloat(borrowedBalance.replace(` ${asset.symbol}`, ''));
+        const walletValue = parseFloat(walletBalance.replace(` ${asset.symbol}`, ''));
+        if (walletValue >= borrowedValue) {
+          setAmount(borrowedValue.toString());
+          setInsufficientWalletFunds(false);
+        } else {
+          setInsufficientWalletFunds(true);
+          // Don't set amount if insufficient funds
+        }
+      } else if (isDecrypted && borrowedBalance.includes(asset.symbol)) {
+        // If wallet balance not decrypted, still allow checkbox but don't auto-fill
+        setInsufficientWalletFunds(false);
+      }
+    }
+    if (!checked) {
+      setBalanceError(null);
+      setInsufficientWalletFunds(false);
+    }
+  };
+
   const toHex = (v: any): `0x${string}` => {
     if (v instanceof Uint8Array) {
       return ('0x' + Array.from(v).map((b: number) => b.toString(16).padStart(2, '0')).join('')) as `0x${string}`;
@@ -161,69 +510,12 @@ export default function RepayForm({
     throw new Error('Unsupported encrypted payload type');
   };
 
-  const handleRepay = async () => {
-    if (!isValidAmount || !amount || !address) return;
-
-    // Clear previous error states when starting new transaction
-    setTransactionError(null);
-    setUserCancelled(false);
-    setBalanceError(null);
-
-    setIsProcessing(true);
-
-    try {
-      // Convert to token units based on decimals
-      const amountFloat = parseFloat(amount);
-      if (Number.isNaN(amountFloat) || amountFloat <= 0) {
-        throw new Error('Invalid amount');
-      }
-
-      const decimals = asset.decimals ?? 18;
-      const amountInWei = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
-
-      // Prepare FHE encrypted input bound to Pool
-      const fheInstance = await getFHEInstance();
-
-      const input = (fheInstance as any).createEncryptedInput(
-        POOL_ADDRESS as `0x${string}`,
-        address as `0x${string}`
-      );
-
-      // Always use add64 to match Pool expectation (euint64)
-      input.add64(amountInWei);
-
-      // Encrypt
-      const encryptedAmount = await input.encrypt();
-
-      // Normalize encrypted payload
-      const formattedEncryptedAmount = toHex(encryptedAmount.handles?.[0]);
-      const formattedInputProof = toHex(encryptedAmount.inputProof);
-
-      // Submit repay txn
-      writeContract({
-        address: CONTRACTS.LENDING_POOL as `0x${string}`,
-        abi: POOL_ABI,
-        functionName: 'repay',
-        args: [
-          asset.address as `0x${string}`,
-          formattedEncryptedAmount,
-          formattedInputProof,
-        ],
-        gas: BigInt(800000),
-        gasPrice: gasPrice ?? undefined,
-      });
-    } catch (err: any) {
-      console.error('Repay error:', err);
-      setTransactionError(parseTransactionError(err));
-      setIsProcessing(false);
-    }
-  };
-
   useEffect(() => {
-    console.log('🔍 RepayForm validation:', { amount, hasBorrowed, borrowedBalance });
+    console.log('🔍 RepayForm validation:', { amount, hasBorrowed, borrowedBalance, walletBalance, isRepayingAll });
 
     // Clear previous error
     setBalanceError(null);
+    setInsufficientWalletFunds(false);
 
     // Check if we have a valid amount and the user has borrowed
     if (amount && hasBorrowed) {
@@ -237,20 +529,49 @@ export default function RepayForm({
         const protocolFee = 0.000000; // No protocol fee
         const totalCost = amountWei + protocolFee; // Only amount + protocol fee
 
-        const isValid = amountWei > 0 && totalCost <= borrowedWei;
+        let isValid = amountWei > 0 && totalCost <= borrowedWei;
+        if (isRepayingAll) {
+          isValid = isValid && amountWei >= borrowedWei;
+        }
+
+        // Additional validation: check wallet balance if available
+        if (walletBalance && walletBalance.includes(asset.symbol) && isWalletBalanceDecrypted) {
+          const walletWei = parseFloat(walletBalance.replace(` ${asset.symbol}`, ''));
+          console.log('🔍 Wallet balance validation:', { totalCost, walletWei, asset: asset.symbol });
+          if (totalCost > walletWei) {
+            isValid = false;
+            const decimalsToShow = asset.decimals === 6 ? 2 : 4;
+            setBalanceError(`Insufficient wallet balance! You have ${walletWei.toFixed(decimalsToShow)} ${asset.symbol} in your wallet, but need ${totalCost.toFixed(decimalsToShow)} ${asset.symbol} to repay.`);
+            console.log('❌ Wallet balance insufficient - transaction blocked');
+          } else {
+            console.log('✅ Wallet balance sufficient');
+          }
+        } else if (walletBalance && !walletBalance.includes(asset.symbol)) {
+          console.log('⚠️ Wallet balance format issue:', { walletBalance, assetSymbol: asset.symbol });
+        } else if (!walletBalance) {
+          console.log('⚠️ No wallet balance provided');
+        } else if (!isWalletBalanceDecrypted) {
+          console.log('⚠️ Wallet balance not decrypted');
+        }
+
         setIsValidAmount(isValid);
 
         if (totalCost > borrowedWei) {
           const decimalsToShow = asset.decimals === 6 ? 2 : 4;
           setBalanceError(`Insufficient balance! You have ${borrowedWei.toFixed(decimalsToShow)} ${asset.symbol} available, but need ${totalCost.toFixed(decimalsToShow)} ${asset.symbol}.`);
+        } else if (isRepayingAll && amountWei < borrowedWei) {
+          const decimalsToShow = asset.decimals === 6 ? 2 : 4;
+          setBalanceError(`To repay all debt, the amount must be at least ${borrowedWei.toFixed(decimalsToShow)} ${asset.symbol}.`);
         }
 
         console.log('🔍 Decrypted balance validation:', {
           amountWei,
           borrowedWei,
+          walletWei: walletBalance && walletBalance.includes(asset.symbol) ? parseFloat(walletBalance.replace(` ${asset.symbol}`, '')) : 'encrypted',
           protocolFee,
           totalCost,
-          isValid
+          isValid,
+          isRepayingAll
         });
       } else {
         const isValid = amountWei > 0;
@@ -264,14 +585,15 @@ export default function RepayForm({
       }
       console.log('🔍 Validation failed:', { hasAmount: !!amount, hasBorrowed });
     }
-  }, [amount, borrowedBalance, hasBorrowed, asset.decimals, asset.symbol]);
+  }, [amount, borrowedBalance, hasBorrowed, walletBalance, isWalletBalanceDecrypted, asset.decimals, asset.symbol, isRepayingAll]);
 
   const disabled =
     !isValidAmount ||
     isPending ||
     isConfirming ||
     isProcessing ||
-    !isConnected;
+    !isConnected ||
+    !!balanceError; // Block transaction if there's any balance error
 
   if (!isConnected) {
     return (
@@ -335,7 +657,7 @@ export default function RepayForm({
           }}
         >
           <Typography variant="body2" sx={{ fontFamily: 'sans-serif' }}>
-            Successfully repaid {amount} {asset.symbol}!
+            {submittedRepayAll ? 'Successfully repaid all debt and cleared your position!' : `Successfully repaid ${submittedAmount} ${asset.symbol}!`}
           </Typography>
         </Alert>
       )}
@@ -403,6 +725,27 @@ export default function RepayForm({
         </Alert>
       )}
 
+      {insufficientWalletFunds && (
+        <Alert
+          severity="error"
+          sx={{
+            mb: 1.5,
+            borderRadius: '4px',
+            transition: 'all 0.3s ease-in-out',
+            transform: 'translateY(-100%)',
+            animation: 'slideInDown 0.4s ease-in-out forwards',
+            '@keyframes slideInDown': {
+              '0%': { transform: 'translateY(-100%)' },
+              '100%': { transform: 'translateY(0)' }
+            }
+          }}
+        >
+          <Typography variant="body2" sx={{ fontFamily: 'sans-serif' }}>
+            Insufficient wallet balance! You need at least {borrowedBalance} in your wallet to repay all debt, but you only have {walletBalance}.
+          </Typography>
+        </Alert>
+      )}
+
       {/* Amount Input */}
       <Box sx={{ mb: 1 }}>
         <TextField
@@ -464,6 +807,46 @@ export default function RepayForm({
         />
       </Box>
 
+      {/* Repay All Checkbox */}
+      <Box sx={{ mb: 1.5 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={isRepayingAll}
+              onChange={(e) => handleRepayAllChange(e.target.checked)}
+              disabled={isPending || isConfirming || !hasBorrowed || !isDecrypted || !hasWalletBalance || !isWalletBalanceDecrypted}
+              sx={{
+                color: 'primary.main',
+                '&.Mui-checked': {
+                  color: 'primary.main',
+                },
+                '&.Mui-disabled': {
+                  color: 'action.disabled',
+                },
+              }}
+            />
+          }
+          label="Repay All Debt"
+          sx={{
+            alignItems: 'flex-start',
+            '& .MuiFormControlLabel-label': {
+              fontSize: '0.9rem',
+              fontFamily: 'sans-serif',
+              color: 'text.primary',
+            },
+          }}
+        />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontFamily: 'sans-serif' }}>
+          This will clear your entire debt position for this asset. The amount entered must cover your full borrowed balance and you must have sufficient wallet balance (confidential tokens) to cover the repayment.
+        </Typography>
+        <Typography variant="caption" color="error" sx={{ display: isDecrypted ? 'none' : 'block', mt: 0.5, fontFamily: 'sans-serif' }}>
+          Repay All requires your borrowed balance to be decrypted so the exact amount can be verified. Please decrypt your balance or uncheck &quot;Repay All Debt&quot;.
+        </Typography>
+        <Typography variant="caption" color="warning.main" sx={{ display: (!hasWalletBalance || !isWalletBalanceDecrypted) ? 'block' : 'none', mt: 0.5, fontFamily: 'sans-serif' }}>
+          Repay All requires your wallet balance to be decrypted to verify you have sufficient funds. Please decrypt your wallet balance.
+        </Typography>
+      </Box>
+
       {/* Transaction Summary */}
       <Box sx={{
         mb: 1.5,
@@ -513,6 +896,26 @@ export default function RepayForm({
         </Box>
       </Box>
 
+      {/* Debug Indicators (non-intrusive) */}
+      <Box sx={{ mt: 0.5, mb: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`FHE: Pool ${CONTRACTS.LENDING_POOL.slice(0, 6)}...${CONTRACTS.LENDING_POOL.slice(-4)}`}
+        />
+        <Chip
+          size="small"
+          variant="outlined"
+          color={isApproved ? 'success' : 'default'}
+          label={`Operator: ${isApproved ? 'yes' : 'no'}`}
+        />
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`Balance: ${isDecrypted ? 'decrypted' : 'encrypted'}`}
+        />
+      </Box>
+
       {/* Submit Button */}
       <Button
         fullWidth
@@ -551,7 +954,17 @@ export default function RepayForm({
           }
         }}
       >
-        {isPending ? 'Repaying...' : isConfirming ? 'Confirming...' : 'Repay'}
+        {transactionPhase === 'operator-approval' && isPending
+          ? 'Setting Operator...'
+          : transactionPhase === 'operator-approval' && isConfirming
+          ? 'Confirming Approval...'
+          : transactionPhase === 'repay' && (isPending || isProcessing)
+          ? 'Repaying...'
+          : transactionPhase === 'repay' && isConfirming
+          ? 'Confirming Repay...'
+          : isApproved
+          ? `Repay ${asset.symbol}`
+          : 'Set Operator'}
       </Button>
 
       {/* Transaction Hash */}

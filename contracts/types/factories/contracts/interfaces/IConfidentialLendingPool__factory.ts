@@ -232,6 +232,11 @@ const _abi = [
         name: "inputProof",
         type: "bytes",
       },
+      {
+        internalType: "bool",
+        name: "isRepayingAll",
+        type: "bool",
+      },
     ],
     name: "repay",
     outputs: [],

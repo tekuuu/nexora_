@@ -3335,6 +3335,24 @@ export default function Dashboard(): JSX.Element {
             borrowedBalance={borrowedBalances?.[selectedAsset?.symbol]?.formattedBorrowed}
             hasBorrowed={borrowedBalances?.[selectedAsset?.symbol]?.hasBorrowed}
             isDecrypted={borrowedBalances?.[selectedAsset?.symbol]?.isDecrypted}
+            walletBalance={
+              selectedAsset?.symbol === 'cWETH' ? cwethBalance.formattedBalance :
+              selectedAsset?.symbol === 'cUSDC' ? cusdcBalance.formattedBalance :
+              selectedAsset?.symbol === 'cDAI' ? cdaiBalance.formattedBalance :
+              undefined
+            }
+            hasWalletBalance={
+              selectedAsset?.symbol === 'cWETH' ? cwethBalance.hasConfidentialToken :
+              selectedAsset?.symbol === 'cUSDC' ? cusdcBalance.hasConfidentialToken :
+              selectedAsset?.symbol === 'cDAI' ? cdaiBalance.hasConfidentialToken :
+              false
+            }
+            isWalletBalanceDecrypted={
+              selectedAsset?.symbol === 'cWETH' ? cwethBalance.isDecrypted :
+              selectedAsset?.symbol === 'cUSDC' ? cusdcBalance.isDecrypted :
+              selectedAsset?.symbol === 'cDAI' ? cdaiBalance.isDecrypted :
+              false
+            }
           />
         </Box>
       )}

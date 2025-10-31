@@ -62,14 +62,16 @@ export type { IConfidentialPoolConfigurator } from "./contracts/interfaces/IConf
 export { IConfidentialPoolConfigurator__factory } from "./factories/contracts/interfaces/IConfidentialPoolConfigurator__factory";
 export type { IPriceOracle } from "./contracts/interfaces/IPriceOracle";
 export { IPriceOracle__factory } from "./factories/contracts/interfaces/IPriceOracle__factory";
-export type { Errors } from "./contracts/libraries/Errors";
-export { Errors__factory } from "./factories/contracts/libraries/Errors__factory";
+export type { ProtocolErrors } from "./contracts/libraries/Errors.sol/ProtocolErrors";
+export { ProtocolErrors__factory } from "./factories/contracts/libraries/Errors.sol/ProtocolErrors__factory";
 export type { SimplePriceOracle } from "./contracts/oracle/SimplePriceOracle";
 export { SimplePriceOracle__factory } from "./factories/contracts/oracle/SimplePriceOracle__factory";
 export type { ConfidentialLendingPool } from "./contracts/protocol/ConfidentialLendingPool";
 export { ConfidentialLendingPool__factory } from "./factories/contracts/protocol/ConfidentialLendingPool__factory";
 export type { ConfidentialPoolConfigurator } from "./contracts/protocol/ConfidentialPoolConfigurator";
 export { ConfidentialPoolConfigurator__factory } from "./factories/contracts/protocol/ConfidentialPoolConfigurator__factory";
+export type { BorrowLogic } from "./contracts/protocol/logic/BorrowLogic";
+export { BorrowLogic__factory } from "./factories/contracts/protocol/logic/BorrowLogic__factory";
 export type { SupplyLogic } from "./contracts/protocol/logic/SupplyLogic";
 export { SupplyLogic__factory } from "./factories/contracts/protocol/logic/SupplyLogic__factory";
 export type { ConfidentialDAI } from "./contracts/token/ConfidentialDAI";

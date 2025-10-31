@@ -1,80 +1,58 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.27;
 
-library Errors {
-    // Reserve errors
-    string public constant RESERVE_NOT_ACTIVE = "1";
-    string public constant BORROWING_NOT_ENABLED = "2";
-    string public constant RESERVE_ALREADY_INITIALIZED = "3";
-    
-    // Balance errors
-    string public constant INSUFFICIENT_BALANCE = "4";
-    string public constant INSUFFICIENT_COLLATERAL = "5";
-    string public constant DEBT_AMOUNT_EXCEEDS_BALANCE = "6";
-    
-    // Access control errors
-    string public constant ONLY_POOL_ADMIN = "10";
-    string public constant ONLY_PRICE_FEED = "11";
-    //string public constant UNAUTHORIZED_ACCESS = "12";
-    string public constant ONLY_EMERGENCY_ADMIN = "12";
-    
-    
-    // Oracle errors
-    string public constant PRICE_NOT_SET = "13";
-    string public constant INVALID_PRICE = "14";
-    string public constant ORACLE_NOT_SET = "15";
-    
-    // Input validation errors
-    string public constant INVALID_INPUT_PROOF = "16";
-    string public constant ZERO_ADDRESS = "17";
-    string public constant INVALID_AMOUNT = "18";
-    
-    // Protocol state errors
-    string public constant PROTOCOL_PAUSED = "19";
-    string public constant SUPPLY_CAP_EXCEEDED = "20";
-    string public constant BORROW_CAP_EXCEEDED = "21";
-    string public constant LIQUIDATION_AMOUNT_TOO_HIGH = "22";
-    
-    // Initialization errors
-    string public constant ALREADY_INITIALIZED = "23";
-    string public constant NOT_INITIALIZED = "24";
-    string public constant INVALID_TIMESTAMP = '25';
-    string public constant INVALID_RESERVE_FACTOR = '26';
-    string public constant INVALID_BASE_RATE = '27';
-    string public constant INVALID_MULTIPLIER = '28';
-    string public constant INVALID_JUMP_MULTIPLIER = '29';
-    string public constant INVALID_KINK = '30';
-    string public constant INVALID_LIQUIDATION_THRESHOLD = '31';
-    string public constant INVALID_COLLATERAL_FACTOR = '32';
-    string public constant INVALID_LIQUIDATION_BONUS = '33';
-    string public constant INVALID_CLOSE_FACTOR = '34';
-    string public constant INVALID_INTEREST_RATE_STRATEGY = '35';
-    string public constant INVALID_RESERVE_CONFIGURATION = '36';
-    string public constant INVALID_ASSET = '37';
-    string public constant ASSET_ALREADY_INITIALIZED = '38';
-    string public constant ASSET_NOT_INITIALIZED = '39';
-    string public constant INVALID_USER_POSITION = '40';
-    string public constant USER_POSITION_NOT_INITIALIZED = '41';
-    string public constant USER_POSITION_ALREADY_INITIALIZED = '42';
-    string internal constant NO_COLLATERAL_ENABLED = "43";
-    string internal constant RESERVE_NOT_COLLATERAL = "44";
-    string public constant PROTOCOL_ALREADY_PAUSED = "45";
-    string public constant MULTIPLE_DEBTS_NOT_ALLOWED = "46";
-    string public constant SINGLE_COLLATERAL_ONLY = "47";
-    string public constant INVALID_ASSET_DECIMALS = "48";
-    string public constant SUPPLY_AMOUNT_TOO_LOW = "49";
-    string public constant WITHDRAW_AMOUNT_TOO_LOW = "50";
-    string public constant BORROW_AMOUNT_TOO_LOW = "51";
-    string public constant REPAY_AMOUNT_TOO_LOW = "52";
-    string public constant LIQUIDATION_NOT_ALLOWED = "53";
-    string public constant NO_DEBT_POSITION = "54";
-    string public constant REPAY_AMOUNT_EXCEEDS_DEBT = "55";
-    string public constant INVALID_LIQUIDATOR = "56";
-    string public constant INVALID_COLLATERAL = "57";
-    string public constant PROTOCOL_NOT_PAUSED = "58";
-    string public constant ORACLE_PRICE_ZERO = "59";
-    string public constant ONLY_POOL_CONFIGURATOR = "60";
-    string public constant INVALID_DEBT_REPAYMENT = "61";
-    string public constant NOT_THE_DESIGNATED_COLLATERAL = "62";
-    string public constant RESERVE_NOT_INITIALIZED = "63";
+/// @title ProtocolErrors
+/// @notice Centralized library for reusable custom errors across the protocol.
+/// @author Nexora Protocol
+library ProtocolErrors {
+    /// @notice Caller is not authorized to perform the requested action.
+    error OnlyPoolConfigurator();
+
+    /// @notice Caller is not authorized to perform the requested action.
+    error OnlyPoolAdmin();
+
+    /// @notice Caller is not authorized to perform the requested action.
+    error OnlyEmergencyAdmin();
+
+    /// @notice Protocol is currently paused.
+    error ProtocolPaused();
+
+    /// @notice The reserve is not active.
+    error ReserveNotActive();
+
+    /// @notice Borrowing is not enabled for this reserve.
+    error BorrowingNotEnabled();
+
+    /// @notice Address parameter is the zero address.
+    error ZeroAddress();
+
+    /// @notice The reserve is not collateral.
+    error ReserveNotCollateral();
+
+    /// @notice Protocol is already paused.
+    error ProtocolAlreadyPaused();
+
+    /// @notice Protocol is not paused.
+    error ProtocolNotPaused();
+
+    /// @notice No collateral is enabled.
+    error NoCollateralEnabled();
+
+    /// @notice Multiple debts are not allowed.
+    error MultipleDebtsNotAllowed();
+
+    /// @notice Oracle price is zero.
+    error OraclePriceZero();
+
+    /// @notice Invalid debt repayment.
+    error InvalidDebtRepayment();
+
+    /// @notice Not the designated collateral.
+    error NotTheDesignatedCollateral();
+
+    /// @notice Reserve is already initialized.
+    error ReserveAlreadyInitialized();
+
+    /// @notice Reserve is not initialized.
+    error ReserveNotInitialized();
 }

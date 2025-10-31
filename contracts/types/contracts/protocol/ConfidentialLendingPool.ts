@@ -99,7 +99,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
       | "priceOracle"
       | "protocolId"
       | "repay"
-      | "repayAll"
       | "reserveList"
       | "reserves"
       | "setCollateralAsset"
@@ -176,11 +175,7 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "repay",
-    values: [AddressLike, BytesLike, BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "repayAll",
-    values: [AddressLike]
+    values: [AddressLike, BytesLike, BytesLike, boolean]
   ): string;
   encodeFunctionData(
     functionFragment: "reserveList",
@@ -274,7 +269,6 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "protocolId", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "repay", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "repayAll", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "reserveList",
     data: BytesLike
@@ -455,7 +449,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   aclManager: TypedContractMethod<[], [string], "view">;
 
   borrow: TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -510,12 +504,15 @@ export interface ConfidentialLendingPool extends BaseContract {
   protocolId: TypedContractMethod<[], [bigint], "view">;
 
   repay: TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [
+      asset: AddressLike,
+      amount: BytesLike,
+      inputProof: BytesLike,
+      isRepayingAll: boolean
+    ],
     [void],
     "nonpayable"
   >;
-
-  repayAll: TypedContractMethod<[asset: AddressLike], [void], "nonpayable">;
 
   reserveList: TypedContractMethod<[arg0: BigNumberish], [string], "view">;
 
@@ -580,7 +577,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   >;
 
   supply: TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -608,7 +605,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   >;
 
   withdraw: TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -623,7 +620,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "borrow"
   ): TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -691,13 +688,15 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "repay"
   ): TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [
+      asset: AddressLike,
+      amount: BytesLike,
+      inputProof: BytesLike,
+      isRepayingAll: boolean
+    ],
     [void],
     "nonpayable"
   >;
-  getFunction(
-    nameOrSignature: "repayAll"
-  ): TypedContractMethod<[asset: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "reserveList"
   ): TypedContractMethod<[arg0: BigNumberish], [string], "view">;
@@ -757,7 +756,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "supply"
   ): TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -789,7 +788,7 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "withdraw"
   ): TypedContractMethod<
-    [asset: AddressLike, amountE6: BytesLike, inputProof: BytesLike],
+    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
     [void],
     "nonpayable"
   >;

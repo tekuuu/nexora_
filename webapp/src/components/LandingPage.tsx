@@ -69,10 +69,20 @@ export default function LandingPage() {
       >
         <Toolbar>
           <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-            <Typography 
-              variant="h6" 
-              component="div" 
-              sx={{ 
+            <Image
+              src="/assets/logos/logo.svg"
+              alt="Nexora Logo"
+              width={40}
+              height={40}
+              style={{
+                marginRight: '12px',
+                filter: 'brightness(0) invert(1)',
+              }}
+            />
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{
                 fontWeight: 800,
                 fontSize: { xs: '1.1rem', sm: '1.5rem' },
                 letterSpacing: '-0.02em',
@@ -286,6 +296,16 @@ export default function LandingPage() {
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={6}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Image
+                  src="/assets/logos/logo.svg"
+                  alt="Nexora Logo"
+                  width={32}
+                  height={32}
+                  style={{
+                    marginRight: '8px',
+                    filter: 'brightness(0) invert(1)',
+                  }}
+                />
                 <Typography
                   variant="h6"
                   sx={{

@@ -8,8 +8,8 @@ import {IConfidentialPoolConfigurator} from "../interfaces/IConfidentialPoolConf
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 import {SupplyLogic} from "./logic/SupplyLogic.sol";
 import {BorrowLogic} from "./logic/BorrowLogic.sol";
-import {Types} from "../libraries/Types.sol"; 
-import {Errors} from "../libraries/Errors.sol";
+import {Types} from "../libraries/Types.sol";
+import {ProtocolErrors} from "../libraries/Errors.sol";
 import {AssetUtils64} from "../libraries/AssetUtils64.sol";
 import {SafeFHEOperations} from "../libraries/SafeFHEOperations.sol"; 
 import {SafeMath64} from "../libraries/SafeMath64.sol";
@@ -54,41 +54,41 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
     // ========== MODIFIERS ==========
 
     modifier onlyConfigurator() {
-        require(msg.sender == address(configurator), Errors.ONLY_POOL_CONFIGURATOR);
+        if (msg.sender != address(configurator)) revert ProtocolErrors.OnlyPoolConfigurator();
         _;
     }
 
     modifier onlyPoolAdmin() {
-        require(aclManager.isPoolAdmin(msg.sender), Errors.ONLY_POOL_ADMIN);
+        if (!aclManager.isPoolAdmin(msg.sender)) revert ProtocolErrors.OnlyPoolAdmin();
         _;
     }
 
     modifier onlyEmergencyAdmin() {
-        require(aclManager.isEmergencyAdmin(msg.sender) || aclManager.isPoolAdmin(msg.sender), Errors.ONLY_EMERGENCY_ADMIN);
+        if (!(aclManager.isEmergencyAdmin(msg.sender) || aclManager.isPoolAdmin(msg.sender))) revert ProtocolErrors.OnlyEmergencyAdmin();
         _;
     }
 
     modifier whenNotPaused() {
-        require(!paused, Errors.PROTOCOL_PAUSED);
+        if (paused) revert ProtocolErrors.ProtocolPaused();
         _;
     }
 
     modifier onlyActiveReserve(address asset) {
-        require(reserves[asset].active, Errors.RESERVE_NOT_ACTIVE);
+        if (!reserves[asset].active) revert ProtocolErrors.ReserveNotActive();
         _;
     }
 
     modifier onlyBorrowingEnabled(address asset) {
-        require(reserves[asset].borrowingEnabled, Errors.BORROWING_NOT_ENABLED);
+        if (!reserves[asset].borrowingEnabled) revert ProtocolErrors.BorrowingNotEnabled();
         _;
     }
 
     // ========== CONSTRUCTOR ==========
 
     constructor(address _aclManager, address _configurator, address _priceOracle) {
-        require(_aclManager != address(0), Errors.ZERO_ADDRESS);
-        require(_configurator != address(0), Errors.ZERO_ADDRESS);
-        require(_priceOracle != address(0), Errors.ZERO_ADDRESS);
+        if (_aclManager == address(0)) revert ProtocolErrors.ZeroAddress();
+        if (_configurator == address(0)) revert ProtocolErrors.ZeroAddress();
+        if (_priceOracle == address(0)) revert ProtocolErrors.ZeroAddress();
 
         aclManager = ACLManager(_aclManager);
         configurator = IConfidentialPoolConfigurator(_configurator);
@@ -99,17 +99,17 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
     // ========== CONFIGURATION FUNCTIONS ==========
 
     function setConfigurator(address _configurator) external onlyPoolAdmin {
-        require(_configurator != address(0), Errors.ZERO_ADDRESS);
+        if (_configurator == address(0)) revert ProtocolErrors.ZeroAddress();
         configurator = IConfidentialPoolConfigurator(_configurator);
     }
 
     function setPriceOracle(address _priceOracle) external onlyPoolAdmin {
-        require(_priceOracle != address(0), Errors.ZERO_ADDRESS);
+        if (_priceOracle == address(0)) revert ProtocolErrors.ZeroAddress();
         priceOracle = IPriceOracle(_priceOracle);
     }
 
     function setCollateralAsset(address _ceth) external onlyPoolAdmin {
-        require(reserves[_ceth].isCollateral, Errors.RESERVE_NOT_COLLATERAL);
+        if (!reserves[_ceth].isCollateral) revert ProtocolErrors.ReserveNotCollateral();
         cethAddress = _ceth;
     }
 
@@ -119,13 +119,13 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
     event ProtocolUnpaused(address indexed admin, uint64 timestamp);
 
     function pause() external onlyEmergencyAdmin {
-        require(!paused, Errors.PROTOCOL_ALREADY_PAUSED);
+        if (paused) revert ProtocolErrors.ProtocolAlreadyPaused();
         paused = true;
         emit ProtocolPaused(msg.sender, uint64(block.timestamp));
     }
 
     function unpause() external onlyEmergencyAdmin {
-        require(paused, Errors.PROTOCOL_NOT_PAUSED);
+        if (!paused) revert ProtocolErrors.ProtocolNotPaused();
         paused = false;
         emit ProtocolUnpaused(msg.sender, uint64(block.timestamp));
     }
@@ -205,17 +205,17 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         bytes calldata inputProof
     ) external override nonReentrant whenNotPaused onlyActiveReserve(asset) onlyBorrowingEnabled(asset) {
 
-        require(userCollateralEnabled[msg.sender][cethAddress], Errors.NO_COLLATERAL_ENABLED);
+        if (!userCollateralEnabled[msg.sender][cethAddress]) revert ProtocolErrors.NoCollateralEnabled();
         Types.ConfidentialUserPosition storage up = _userPositions[msg.sender];
         if (up.currentDebtAsset != address(0) && up.currentDebtAsset != asset) {
-            revert (Errors.MULTIPLE_DEBTS_NOT_ALLOWED);
+            revert ProtocolErrors.MultipleDebtsNotAllowed();
         }
 
         euint64 borrowingPowerUSD = _getAccountBorrowPowerUSD(msg.sender);
 
         Types.ConfidentialReserve storage borrowReserve = reserves[asset];
         uint64 borrowPrice = uint64(priceOracle.getPrice(asset));
-        require(borrowPrice > 0, Errors.ORACLE_PRICE_ZERO);
+        if (borrowPrice == 0) revert ProtocolErrors.OraclePriceZero();
 
         euint64 requestedAmount = FHE.fromExternal(amount, inputProof);
         euint64 currentDebtBalance = _userBorrowedBalances[msg.sender][asset];
@@ -248,25 +248,38 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         emit Borrow(asset, msg.sender);
     }
 
-/**
+    /**
      * @notice Repay logic - Calls BorrowLogic
      * @param asset The address of the asset to repay.
      * @param amount The encrypted amount (normalized to 6 decimals) to repay.
      * @param inputProof FHEVM input proof for the encrypted amount.
+     * @param isRepayingAll A public bool to signal intent to clear the debt.
+     * If true, the function will clear the user's debt asset (set `currentDebtAsset` to address(0)).
+     * The repayment amount will be capped at the user's total debt - if the provided amount is less than the debt,
+     * only that amount is repaid; if greater, it's capped at the total debt. This ensures safe repayment
+     * without reverting due to amount mismatches.
      */
     function repay(
         address asset,
         externalEuint64 amount,
-        bytes calldata inputProof
+        bytes calldata inputProof,
+        bool isRepayingAll 
     ) external override nonReentrant whenNotPaused onlyActiveReserve(asset) {
         Types.ConfidentialUserPosition storage up = _userPositions[msg.sender];
-        require(asset == up.currentDebtAsset || up.currentDebtAsset == address(0), Errors.INVALID_DEBT_REPAYMENT);
+        if (!(asset == up.currentDebtAsset || up.currentDebtAsset == address(0))) revert ProtocolErrors.InvalidDebtRepayment();
 
         euint64 payAmount = FHE.fromExternal(amount, inputProof);
         euint64 userDebt = _userBorrowedBalances[msg.sender][asset];
 
-        ebool isOverpaying = payAmount.gt(userDebt);
-        euint64 safePayAmount = FHE.select(isOverpaying, userDebt, payAmount);
+        euint64 safePayAmount;
+        
+        if (isRepayingAll) {
+            ebool isSafe = FHE.le(payAmount, userDebt);
+            safePayAmount = FHE.select(isSafe,payAmount, userDebt);
+        } else {
+            ebool isOverpaying = payAmount.gt(userDebt);
+            safePayAmount = FHE.select(isOverpaying, userDebt, payAmount);
+        }
 
         euint64 newDebtBalance = BorrowLogic.executeRepay(
             asset,
@@ -274,34 +287,14 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
             reserves[asset],
             userDebt
         );
+
         _userBorrowedBalances[msg.sender][asset] = newDebtBalance;
-        // Make the new debt balance publicly decryptable to allow checking if it's zero
-        FHE.makePubliclyDecryptable(newDebtBalance);
-        // Clear currentDebtAsset if the debt is fully repaid (balance is zero)
-        if (FHE.decrypt(newDebtBalance) == 0) {
+        if (isRepayingAll) {
             up.currentDebtAsset = address(0);
         }
         emit Repay(asset, msg.sender);
     }
 
-    function repayAll(address asset) external nonReentrant whenNotPaused onlyActiveReserve(asset) {
-        Types.ConfidentialUserPosition storage up = _userPositions[msg.sender];
-        require(asset == up.currentDebtAsset || up.currentDebtAsset == address(0), Errors.INVALID_DEBT_REPAYMENT);
-
-        euint64 userDebtE6 = _userBorrowedBalances[msg.sender][asset];
-
-        _userBorrowedBalances[msg.sender][asset] = BorrowLogic.executeRepay(
-            asset,
-            userDebtE6,
-            reserves[asset],
-            userDebtE6
-        );
-
-        // Clear the currentDebtAsset tracker since the debt is fully repaid
-        up.currentDebtAsset = address(0);
-
-        emit Repay(asset, msg.sender);
-    }
 
     // ========== VIEW FUNCTIONS ==========
     function getUserSuppliedBalance(address user, address asset) external view override(IConfidentialLendingPool, IConfidentialLendingPoolView) returns (euint64) {
@@ -323,8 +316,8 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
     // ========== COLLATERAL TOGGLE ==========
     event UserCollateralChanged(address indexed user, address indexed asset, bool useAsCollateral);
     function setUserUseReserveAsCollateral(address asset, bool useAsCollateral) external whenNotPaused onlyActiveReserve(asset) {
-        require(asset == cethAddress, Errors.NOT_THE_DESIGNATED_COLLATERAL);
-        require(reserves[asset].isCollateral, Errors.RESERVE_NOT_COLLATERAL);
+        if (asset != cethAddress) revert ProtocolErrors.NotTheDesignatedCollateral();
+        if (!reserves[asset].isCollateral) revert ProtocolErrors.ReserveNotCollateral();
         userCollateralEnabled[msg.sender][asset] = useAsCollateral;
         emit UserCollateralChanged(msg.sender, asset, useAsCollateral);
     }
@@ -336,7 +329,7 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         bool isCollateral,
         uint64 collateralFactor
     ) external onlyConfigurator {
-        require(reserves[asset].underlyingAsset == address(0), Errors.RESERVE_ALREADY_INITIALIZED);
+        if (reserves[asset].underlyingAsset != address(0)) revert ProtocolErrors.ReserveAlreadyInitialized();
 
         Types.ConfidentialReserve storage reserve = reserves[asset];
         reserve.underlyingAsset = asset;
@@ -367,9 +360,9 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         bool isCollateral,
         uint64 collateralFactor,
         uint64 supplyCap,
-        uint64 borrowCap 
+        uint64 borrowCap
     ) external onlyConfigurator {
-        require(reserves[asset].underlyingAsset != address(0), Errors.RESERVE_NOT_INITIALIZED);
+        if (reserves[asset].underlyingAsset == address(0)) revert ProtocolErrors.ReserveNotInitialized();
         Types.ConfidentialReserve storage reserve = reserves[asset];
         reserve.active = active;
         reserve.borrowingEnabled = borrowingEnabled;

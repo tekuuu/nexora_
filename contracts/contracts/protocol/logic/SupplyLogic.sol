@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import {FHE, euint64, ebool, externalEuint64, euint128} from "@fhevm/solidity/lib/FHE.sol";
 import {Types} from "../../libraries/Types.sol";
-import {Errors} from "../../libraries/Errors.sol";
+import {ProtocolErrors} from "../../libraries/Errors.sol";
 import {Constants} from "../../config/Constants.sol";
 import {SafeFHEOperations} from "../../libraries/SafeFHEOperations.sol";
 import {SafeMath64} from "../../libraries/SafeMath64.sol";
@@ -28,9 +28,9 @@ library SupplyLogic {
         euint64 userBalance,
         Types.ConfidentialUserPosition storage userPosition
     ) external returns (euint64 newUserBalance) {
-        require(reserve.active, Errors.RESERVE_NOT_ACTIVE);
-        require(!reserve.isPaused, Errors.PROTOCOL_PAUSED);
-        require(asset != address(0), Errors.ZERO_ADDRESS);
+        if (!reserve.active) revert ProtocolErrors.ReserveNotActive();
+        if (reserve.isPaused) revert ProtocolErrors.ProtocolPaused();
+        if (asset == address(0)) revert ProtocolErrors.ZeroAddress();
 
         euint64 amount = FHE.fromExternal(encryptedAmount, inputProof);
 
@@ -79,9 +79,9 @@ library SupplyLogic {
         euint64 userBalance,
         address user
     ) external returns (euint64 newUserBalance) {
-        require(reserve.active, Errors.RESERVE_NOT_ACTIVE);
-        require(!reserve.isPaused, Errors.PROTOCOL_PAUSED);
-        require(asset != address(0), Errors.ZERO_ADDRESS);
+        if (!reserve.active) revert ProtocolErrors.ReserveNotActive();
+        if (reserve.isPaused) revert ProtocolErrors.ProtocolPaused();
+        if (asset == address(0)) revert ProtocolErrors.ZeroAddress();
 
         euint64 finalAmount = withdrawAmount.validateAndCap(userBalance);
 

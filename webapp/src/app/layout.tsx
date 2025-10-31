@@ -9,6 +9,9 @@ import Providers from '../components/Providers';
 export const metadata: Metadata = {
   title: 'Nexora - Confidential Lending Protocol',
   description: 'Privacy-first lending protocol using FHE technology',
+  icons: {
+    icon: '/assets/logos/logo.svg',
+  },
 };
 
 export default function RootLayout({

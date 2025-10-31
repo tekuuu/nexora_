@@ -76,7 +76,7 @@ export interface IConfidentialLendingPoolInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "repay",
-    values: [AddressLike, BytesLike, BytesLike]
+    values: [AddressLike, BytesLike, BytesLike, boolean]
   ): string;
   encodeFunctionData(
     functionFragment: "setUserUseReserveAsCollateral",
@@ -264,7 +264,12 @@ export interface IConfidentialLendingPool extends BaseContract {
   >;
 
   repay: TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [
+      asset: AddressLike,
+      amount: BytesLike,
+      inputProof: BytesLike,
+      isRepayingAll: boolean
+    ],
     [void],
     "nonpayable"
   >;
@@ -348,7 +353,12 @@ export interface IConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "repay"
   ): TypedContractMethod<
-    [asset: AddressLike, amount: BytesLike, inputProof: BytesLike],
+    [
+      asset: AddressLike,
+      amount: BytesLike,
+      inputProof: BytesLike,
+      isRepayingAll: boolean
+    ],
     [void],
     "nonpayable"
   >;

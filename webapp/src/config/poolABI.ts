@@ -102,7 +102,8 @@ export const POOL_ABI = [
     "inputs": [
       { "internalType": "address", "name": "asset", "type": "address" },
       { "internalType": "externalEuint64", "name": "amount", "type": "bytes32" },
-      { "internalType": "bytes", "name": "inputProof", "type": "bytes" }
+      { "internalType": "bytes", "name": "inputProof", "type": "bytes" },
+      { "internalType": "bool", "name": "isRepayingAll", "type": "bool" }
     ],
     "name": "repay",
     "outputs": [],
