@@ -2,7 +2,7 @@
 
 *A privacy-preserving DeFi lending protocol built with FHEVM (Fully Homomorphic Encryption)*
 
-![Nexora Banner](https://via.placeholder.com/800x200/4A90E2/FFFFFF?text=Nexora+-+Confidential+Lending+Platform)
+![Nexora Banner](webapp/public/assets/logos/Nexora_banner_1.svg)
 
 ## Badges
 
