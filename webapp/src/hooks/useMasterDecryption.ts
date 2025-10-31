@@ -5,7 +5,7 @@ import { useAccount, useWalletClient } from 'wagmi';
 import { getFHEInstance } from '../utils/fhe';
 import { FhevmDecryptionSignature } from '../utils/FhevmDecryptionSignature';
 import { ethers } from 'ethers';
-import { CONTRACTS } from '../config/contracts';
+import { CONTRACTS, NETWORK_CONFIG } from '../config/contracts';
 
   // Master decryption contract addresses
 
@@ -136,19 +136,61 @@ export const useMasterDecryption = () => {
     try {
       console.log('🔓 Starting master decryption process...');
       
+      // Ensure wallet/provider is ready and on the expected chain
+      const waitForWalletReady = async (): Promise<ethers.Signer> => {
+        const deadline = Date.now() + 15_000; // 15s max
+        let lastError: any = null;
+        while (Date.now() < deadline) {
+          try {
+            if (typeof window === 'undefined' || !(window as any).ethereum) {
+              lastError = new Error('Wallet provider unavailable');
+              await new Promise((r) => setTimeout(r, 300));
+              continue;
+            }
+            const provider = new ethers.BrowserProvider((window as any).ethereum);
+            // Some providers need a small delay before getNetwork/getSigner are available
+            const network = await provider.getNetwork();
+            const chainIdHex = await (window as any).ethereum.request?.({ method: 'eth_chainId' }).catch(() => null);
+            const chainId = Number(chainIdHex ? BigInt(chainIdHex) : network?.chainId);
+
+            if (chainId !== NETWORK_CONFIG.chainId) {
+              // Try to switch silently
+              try {
+                await (window as any).ethereum.request?.({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: '0x' + NETWORK_CONFIG.chainId.toString(16) }],
+                });
+                // give provider a moment to switch
+                await new Promise((r) => setTimeout(r, 500));
+              } catch (switchErr) {
+                lastError = new Error(`Wrong network. Expected chainId=${NETWORK_CONFIG.chainId}, got=${chainId}`);
+                await new Promise((r) => setTimeout(r, 500));
+                continue;
+              }
+            }
+
+            const signer = await provider.getSigner();
+            const signerAddr = await signer.getAddress();
+            if (!signerAddr || signerAddr.toLowerCase() !== address.toLowerCase()) {
+              lastError = new Error('Signer not ready for current address');
+              await new Promise((r) => setTimeout(r, 300));
+              continue;
+            }
+            return signer;
+          } catch (e) {
+            lastError = e;
+            await new Promise((r) => setTimeout(r, 300));
+          }
+        }
+        throw lastError ?? new Error('Wallet not ready');
+      };
+
       // Get FHE instance
       const fheInstance = await getFHEInstance();
       console.log('✅ FHE instance created');
       
-      // Create signer from injected EIP-1193 provider only (MetaMask, injected)
-      if (typeof window === 'undefined' || !(window as any).ethereum) {
-        setDecryptionError('Wallet provider unavailable for EIP-712 signing. Please use an injected wallet (e.g., MetaMask).');
-        setIsDecrypting(false);
-        isUnlockingRef.current = false;
-        return;
-      }
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const signer = await provider.getSigner();
+      // Get signer on the correct chain with retries
+      const signer = await waitForWalletReady();
       
       let sig = masterSignatureRef.current;
       
@@ -179,15 +221,33 @@ export const useMasterDecryption = () => {
           lendingPool: CONTRACTS.LENDING_POOL, // 🆕 NEW
           finalAddresses: CONTRACT_ADDRESSES
         });
-        
-        sig = await FhevmDecryptionSignature.loadOrSign(
-          fheInstance as any,
-          CONTRACT_ADDRESSES,
-          signer
-        );
+
+  // Ensure deterministic ordering of addresses for the signature/key (preserve checksum casing)
+  const orderedAddresses = [...CONTRACT_ADDRESSES].sort();
+
+        // Retry loop for signing (handles wallet/SDK warm-up)
+        let attempt = 0;
+        let lastErr: any = null;
+        while (attempt < 3 && !sig) {
+          attempt += 1;
+          try {
+            sig = await FhevmDecryptionSignature.loadOrSign(
+              fheInstance as any,
+              orderedAddresses,
+              signer
+            );
+            if (!sig) throw new Error('Signature creation returned null');
+          } catch (e: any) {
+            lastErr = e;
+            console.warn(`⚠️ Master signature attempt ${attempt} failed:`, e?.message ?? e);
+            // Small backoff before retry
+            await new Promise((r) => setTimeout(r, 800 * attempt));
+          }
+        }
 
         if (!sig) {
-          throw new Error('Failed to create master decryption signature');
+          const reason = (lastErr && (lastErr.message || String(lastErr))) || 'unknown';
+          throw new Error(`Failed to create master decryption signature: ${reason}`);
         }
 
         console.log('✅ Master decryption signature created');
@@ -235,7 +295,7 @@ export const useMasterDecryption = () => {
       setIsDecrypting(false);
       isUnlockingRef.current = false;
     }
-  }, [isConnected, address, walletClient, isDecrypting]);
+  }, [isConnected, address, walletClient, isDecrypting, CONTRACT_ADDRESSES]);
 
   // Load stored signature on mount
   useEffect(() => {
@@ -275,7 +335,7 @@ export const useMasterDecryption = () => {
         loadStoredSignatureObject();
       }
     }
-  }, [address, walletClient]);
+  }, [address, walletClient, CONTRACT_ADDRESSES]);
 
   // Master lock function
   const lockAllBalances = useCallback(() => {

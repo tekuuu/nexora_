@@ -355,7 +355,10 @@ export class FhevmDecryptionSignature {
         eip712: eip712 as EIP712Type,
         userAddress,
       });
-    } catch {
+    } catch (e: any) {
+      console.error('FhevmDecryptionSignature.new(): failed to sign EIP-712 message', {
+        reason: e?.message ?? String(e),
+      });
       return null;
     }
   }

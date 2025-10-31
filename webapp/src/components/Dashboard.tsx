@@ -44,7 +44,6 @@ import TransactionHistoryTable from './TransactionHistoryTable';
 import WalletAssetBreakdown from './WalletAssetBreakdown';
 import styles from './SwapStyles.module.css';
 import MarketsTab from './MarketsTab';
-import UserOverviewSection from './UserOverviewSection';
 import UserSuppliesSection from './UserSuppliesSection';
 import UserBorrowsSection from './UserBorrowsSection';
 import { useTheme } from '../contexts/ThemeContext';
@@ -2269,16 +2268,7 @@ export default function Dashboard(): JSX.Element {
                 : '0 4px 20px rgba(0, 0, 0, 0.1)'
             }}>
               <CardContent sx={{ p: { xs: 2, sm: 4 } }}>
-                {/* User overview section (Net Worth, Total Supply, Total Borrow, Health Factor) */}
-                <UserOverviewSection
-                  suppliedBalances={suppliedBalancesMap}
-                  borrowedBalances={borrowedBalances}
-                  assets={supplyAssets}
-                  isLoadingSupplied={isLoadingSupplied}
-                  isLoadingBorrowed={isLoadingBorrowed}
-                  isDarkMode={isDarkMode}
-                  userCollateralEnabledBySymbol={userCollateralEnabledBySymbol}
-                />
+                {/* User overview removed as requested */}
 
                 <Box sx={{ 
                   display: 'flex', 

@@ -195,13 +195,18 @@ export const getFHEInstance = async (provider?: any): Promise<FhevmInstance> => 
             ]
           },
           message: {
-            publicKey: publicKey || '0x',
+            // Ethers requires BytesLike for bytes-typed fields
+            publicKey: (publicKey && publicKey.startsWith('0x')) ? publicKey : '0x' + (publicKey || '').toString().padEnd(64, '0'),
             contract: (contractAddresses && contractAddresses[0]) || '0x0000000000000000000000000000000000000000',
             startTime: startTimestamp || 0,
             duration: durationDays || 0
           }
         }),
-        generateKeypair: () => ({ publicKey: 'mock-pub', privateKey: 'mock-priv' }),
+        generateKeypair: () => ({
+          // Return valid hex strings for keys so EIP-712 signing doesn't fail
+          publicKey: '0x' + '11'.repeat(32), // 32-byte hex
+          privateKey: '0x' + '22'.repeat(32), // 32-byte hex
+        }),
         createEncryptedInput: (contractAddress: string, userAddress: string) => ({
           add64: (value: bigint) => {
             console.log('Mock: Adding value', value.toString());

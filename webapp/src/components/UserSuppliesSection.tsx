@@ -264,9 +264,6 @@ const UserSuppliesSection: React.FC<UserSuppliesSectionProps> = ({
         <Typography variant="h6" sx={{ mb: 1, color: isDarkMode ? 'white' : '#000000' }}>
           Supply assets to get started
         </Typography>
-        <Typography variant="body2" sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)', mb: 2 }}>
-          Supply assets to the protocol to earn interest and use as collateral
-        </Typography>
         <Button variant="contained" onClick={() => (onNavigateToMarkets ? onNavigateToMarkets() : undefined)}>
           Go to Markets
         </Button>
