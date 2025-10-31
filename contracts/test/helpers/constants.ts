@@ -195,3 +195,93 @@ export const EVENT_REPAY = "Repay";
 export const BORROWER_1_INDEX = 0;
 export const BORROWER_2_INDEX = 1;
 export const BORROWER_3_INDEX = 2;
+
+// ==============================================
+// Phase 7: Sepolia Integration Testing Constants
+// ==============================================
+
+// Network Configuration Constants
+/**
+ * Sepolia network chain ID for network detection
+ */
+export const SEPOLIA_CHAIN_ID = 11155111n;
+/**
+ * Hardhat local network chain ID for mocked mode
+ */
+export const HARDHAT_CHAIN_ID = 31337n;
+/**
+ * Average Sepolia block time in milliseconds (12 seconds)
+ */
+export const SEPOLIA_BLOCK_TIME = 12_000; // ms
+/**
+ * Default confirmations to wait for on Sepolia
+ */
+export const SEPOLIA_CONFIRMATION_BLOCKS = 2;
+
+// Timeout Constants for Sepolia Operations (milliseconds)
+export const TIMEOUT_SUPPLY_SEPOLIA = 180_000; // 3 minutes
+export const TIMEOUT_WITHDRAW_SEPOLIA = 180_000; // 3 minutes
+export const TIMEOUT_BORROW_SEPOLIA = 240_000; // 4 minutes
+export const TIMEOUT_REPAY_SEPOLIA = 180_000; // 3 minutes
+export const TIMEOUT_COLLATERAL_TOGGLE_SEPOLIA = 120_000; // 2 minutes
+export const TIMEOUT_HEALTH_CHECK_SEPOLIA = 240_000; // 4 minutes
+export const TIMEOUT_DECRYPTION_CALLBACK = 60_000; // 1 minute
+export const TIMEOUT_FULL_LIFECYCLE = 600_000; // 10 minutes
+
+// Integration Test Amounts (6 decimals)
+export const INTEGRATION_COLLATERAL_AMOUNT = 10_000n * 10n ** 6n; // 10,000 units
+export const INTEGRATION_BORROW_AMOUNT = 5_000n * 10n ** 6n; // 5,000 units
+export const INTEGRATION_SUPPLY_AMOUNT = 50_000n * 10n ** 6n; // 50,000 units
+export const INTEGRATION_REPAY_AMOUNT = 2_500n * 10n ** 6n; // 2,500 units
+
+// Multi-User Test Configuration
+export const NUM_CONCURRENT_USERS = 3;
+export const NUM_STRESS_TEST_USERS = 5;
+export const OPERATIONS_PER_USER = 3;
+
+// Reserve Liquidity Test Values (6 decimals)
+export const INITIAL_RESERVE_LIQUIDITY = 1_000_000n * 10n ** 6n; // 1,000,000
+export const LOW_LIQUIDITY_THRESHOLD = 10_000n * 10n ** 6n; // 10,000
+export const DEPLETED_LIQUIDITY_THRESHOLD = 1_000n * 10n ** 6n; // 1,000
+
+// Gas Cost Expectations (upper bounds)
+export const EXPECTED_GAS_SUPPLY_MAX = 500_000n;
+export const EXPECTED_GAS_WITHDRAW_MAX = 500_000n;
+export const EXPECTED_GAS_BORROW_MAX = 800_000n;
+export const EXPECTED_GAS_REPAY_MAX = 500_000n;
+export const EXPECTED_GAS_COLLATERAL_TOGGLE_MAX = 200_000n;
+
+// Decryption and Oracle Constants
+export const DECRYPTION_RETRY_ATTEMPTS = 3;
+export const DECRYPTION_RETRY_DELAY = 10_000; // 10s
+export const ORACLE_CALLBACK_POLL_INTERVAL = 5_000; // 5s
+export const ORACLE_CALLBACK_MAX_POLLS = 12; // 60s total
+
+// Health Factor Test Scenarios
+export const SAFE_HEALTH_FACTOR_MARGIN = 1_500n * 10n ** 6n; // margin in 6d precision
+export const UNSAFE_HEALTH_FACTOR_MARGIN = 500n * 10n ** 6n; // margin in 6d precision
+export const CRITICAL_HEALTH_FACTOR_THRESHOLD = 10_000n; // 100%
+
+// Protocol Invariant Validation Constants
+export const INVARIANT_CHECK_TOLERANCE = 100n;
+export const RESERVE_TOTAL_TOLERANCE = 1_000n;
+
+// Test Scenario Identifiers
+export const SCENARIO_COMPLETE_LIFECYCLE = "complete_lifecycle";
+export const SCENARIO_MULTI_USER = "multi_user";
+export const SCENARIO_STRESS_TEST = "stress_test";
+export const SCENARIO_LIQUIDATION = "liquidation";
+export const SCENARIO_CROSS_ASSET = "cross_asset";
+
+// Error Message Constants for Integration Tests
+export const ERROR_DECRYPTION_TIMEOUT = "Decryption timeout exceeded";
+export const ERROR_TRANSACTION_TIMEOUT = "Transaction confirmation timeout";
+export const ERROR_INSUFFICIENT_SEPOLIA_ETH = "Insufficient Sepolia ETH for gas";
+export const ERROR_NETWORK_NOT_SEPOLIA = "Tests must run on Sepolia network";
+
+// Logging and Reporting Constants
+export const LOG_LEVEL_VERBOSE = "verbose";
+export const LOG_LEVEL_NORMAL = "normal";
+export const LOG_LEVEL_QUIET = "quiet";
+export const REPORT_GAS_COSTS: boolean = true;
+export const REPORT_TIMING: boolean = true;
