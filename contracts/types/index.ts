@@ -64,6 +64,8 @@ export type { IPriceOracle } from "./contracts/interfaces/IPriceOracle";
 export { IPriceOracle__factory } from "./factories/contracts/interfaces/IPriceOracle__factory";
 export type { ProtocolErrors } from "./contracts/libraries/Errors.sol/ProtocolErrors";
 export { ProtocolErrors__factory } from "./factories/contracts/libraries/Errors.sol/ProtocolErrors__factory";
+export type { MockConfidentialLendingPool } from "./contracts/mocks/MockConfidentialLendingPool";
+export { MockConfidentialLendingPool__factory } from "./factories/contracts/mocks/MockConfidentialLendingPool__factory";
 export type { SimplePriceOracle } from "./contracts/oracle/SimplePriceOracle";
 export { SimplePriceOracle__factory } from "./factories/contracts/oracle/SimplePriceOracle__factory";
 export type { ConfidentialLendingPool } from "./contracts/protocol/ConfidentialLendingPool";

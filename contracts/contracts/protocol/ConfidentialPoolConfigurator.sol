@@ -113,11 +113,19 @@ contract ConfidentialPoolConfigurator is IConfidentialPoolConfigurator, Ownable 
 
     function pauseReserve(address asset) external onlyRiskAdmin {
         reserves[asset].isPaused = true;
+        // sync paused state to lending pool
+        if (address(lendingPool) != address(0)) {
+            lendingPool.setReservePaused(asset, true);
+        }
         emit ReservePaused(asset);
     }
 
     function unpauseReserve(address asset) external onlyRiskAdmin {
         reserves[asset].isPaused = false;
+        // sync paused state to lending pool
+        if (address(lendingPool) != address(0)) {
+            lendingPool.setReservePaused(asset, false);
+        }
         emit ReserveUnpaused(asset);
     }
 

@@ -52,6 +52,9 @@ interface IConfidentialLendingPool {
         uint64 borrowCap
     ) external;
 
+    // Sync paused state from configurator
+    function setReservePaused(address asset, bool isPaused_) external;
+
     // View functions
     function getUserSuppliedBalance(address user, address asset) external view returns (euint64);
     function getUserBorrowedBalance(address user, address asset) external view returns (euint64);

@@ -252,6 +252,24 @@ const _abi = [
       },
       {
         internalType: "bool",
+        name: "isPaused_",
+        type: "bool",
+      },
+    ],
+    name: "setReservePaused",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "asset",
+        type: "address",
+      },
+      {
+        internalType: "bool",
         name: "useAsCollateral",
         type: "bool",
       },

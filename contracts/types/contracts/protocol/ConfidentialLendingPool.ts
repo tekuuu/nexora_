@@ -104,6 +104,7 @@ export interface ConfidentialLendingPoolInterface extends Interface {
       | "setCollateralAsset"
       | "setConfigurator"
       | "setPriceOracle"
+      | "setReservePaused"
       | "setUserUseReserveAsCollateral"
       | "supply"
       | "unpause"
@@ -198,6 +199,10 @@ export interface ConfidentialLendingPoolInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "setReservePaused",
+    values: [AddressLike, boolean]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setUserUseReserveAsCollateral",
     values: [AddressLike, boolean]
   ): string;
@@ -284,6 +289,10 @@ export interface ConfidentialLendingPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "setPriceOracle",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setReservePaused",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -570,6 +579,12 @@ export interface ConfidentialLendingPool extends BaseContract {
     "nonpayable"
   >;
 
+  setReservePaused: TypedContractMethod<
+    [asset: AddressLike, isPaused_: boolean],
+    [void],
+    "nonpayable"
+  >;
+
   setUserUseReserveAsCollateral: TypedContractMethod<
     [asset: AddressLike, useAsCollateral: boolean],
     [void],
@@ -746,6 +761,13 @@ export interface ConfidentialLendingPool extends BaseContract {
   getFunction(
     nameOrSignature: "setPriceOracle"
   ): TypedContractMethod<[_priceOracle: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setReservePaused"
+  ): TypedContractMethod<
+    [asset: AddressLike, isPaused_: boolean],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "setUserUseReserveAsCollateral"
   ): TypedContractMethod<

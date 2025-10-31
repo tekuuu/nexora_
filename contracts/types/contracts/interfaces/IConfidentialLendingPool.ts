@@ -44,6 +44,7 @@ export interface IConfidentialLendingPoolInterface extends Interface {
       | "getUserSuppliedBalance"
       | "initReserve"
       | "repay"
+      | "setReservePaused"
       | "setUserUseReserveAsCollateral"
       | "supply"
       | "updateReserveConfig"
@@ -77,6 +78,10 @@ export interface IConfidentialLendingPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "repay",
     values: [AddressLike, BytesLike, BytesLike, boolean]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setReservePaused",
+    values: [AddressLike, boolean]
   ): string;
   encodeFunctionData(
     functionFragment: "setUserUseReserveAsCollateral",
@@ -121,6 +126,10 @@ export interface IConfidentialLendingPoolInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "repay", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "setReservePaused",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "setUserUseReserveAsCollateral",
     data: BytesLike
@@ -274,6 +283,12 @@ export interface IConfidentialLendingPool extends BaseContract {
     "nonpayable"
   >;
 
+  setReservePaused: TypedContractMethod<
+    [asset: AddressLike, isPaused_: boolean],
+    [void],
+    "nonpayable"
+  >;
+
   setUserUseReserveAsCollateral: TypedContractMethod<
     [asset: AddressLike, useAsCollateral: boolean],
     [void],
@@ -359,6 +374,13 @@ export interface IConfidentialLendingPool extends BaseContract {
       inputProof: BytesLike,
       isRepayingAll: boolean
     ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "setReservePaused"
+  ): TypedContractMethod<
+    [asset: AddressLike, isPaused_: boolean],
     [void],
     "nonpayable"
   >;

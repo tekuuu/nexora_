@@ -126,6 +126,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ProtocolErrors__factory>;
     getContractFactory(
+      name: "MockConfidentialLendingPool",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MockConfidentialLendingPool__factory>;
+    getContractFactory(
       name: "SimplePriceOracle",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.SimplePriceOracle__factory>;
@@ -311,6 +315,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.ProtocolErrors>;
     getContractAt(
+      name: "MockConfidentialLendingPool",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MockConfidentialLendingPool>;
+    getContractAt(
       name: "SimplePriceOracle",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -479,6 +488,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ProtocolErrors>;
     deployContract(
+      name: "MockConfidentialLendingPool",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockConfidentialLendingPool>;
+    deployContract(
       name: "SimplePriceOracle",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SimplePriceOracle>;
@@ -663,6 +676,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ProtocolErrors>;
+    deployContract(
+      name: "MockConfidentialLendingPool",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockConfidentialLendingPool>;
     deployContract(
       name: "SimplePriceOracle",
       args: any[],

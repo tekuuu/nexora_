@@ -346,9 +346,15 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         reserve.borrowCap = 0;
         reserve.decimals = ConfidentialFungibleToken(asset).decimals();
 
-        FHE.makePubliclyDecryptable(reserve.totalSupplied);
-        FHE.makePubliclyDecryptable(reserve.totalBorrowed);
-        FHE.makePubliclyDecryptable(reserve.availableLiquidity);
+    // Grant the pool contract permission to operate on encrypted reserve state
+    FHE.allowThis(reserve.totalSupplied);
+    FHE.allowThis(reserve.totalBorrowed);
+    FHE.allowThis(reserve.availableLiquidity);
+
+    // Also make initial values publicly decryptable for visibility in tests
+    FHE.makePubliclyDecryptable(reserve.totalSupplied);
+    FHE.makePubliclyDecryptable(reserve.totalBorrowed);
+    FHE.makePubliclyDecryptable(reserve.availableLiquidity);
 
         reserveList.push(asset);
     }
@@ -370,6 +376,12 @@ contract ConfidentialLendingPool is IConfidentialLendingPool, IConfidentialLendi
         reserve.collateralFactor = collateralFactor;
         reserve.supplyCap = supplyCap;
         reserve.borrowCap = borrowCap;
+    }
+
+    // Update only the paused state for a reserve
+    function setReservePaused(address asset, bool isPaused_) external onlyConfigurator {
+        if (reserves[asset].underlyingAsset == address(0)) revert ProtocolErrors.ReserveNotInitialized();
+        reserves[asset].isPaused = isPaused_;
     }
 
    // ========== INTERNAL HEALTH CALCULATION ==========

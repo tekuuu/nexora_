@@ -32,23 +32,28 @@ library SupplyLogic {
         if (reserve.isPaused) revert ProtocolErrors.ProtocolPaused();
         if (asset == address(0)) revert ProtocolErrors.ZeroAddress();
 
-        euint64 amount = FHE.fromExternal(encryptedAmount, inputProof);
+    euint64 amount = FHE.fromExternal(encryptedAmount, inputProof);
+    // Ensure the pool (current contract via DELEGATECALL) has ACL permissions
+    // to operate on the received encrypted handle during validation math.
+    FHE.allowThis(amount);
 
         // --- Supply Cap Check ---
-        euint64 maxAllowedAmount = FHE.asEuint64(Constants.MAX_EUINT64);
+       euint64 maxAllowedAmount = FHE.asEuint64(Constants.MAX_EUINT64);
         if (reserve.supplyCap > 0) {
              euint64 currentTotalSupply = reserve.totalSupplied; 
              euint64 cap = FHE.asEuint64(reserve.supplyCap);
-             euint64 remainingCap = cap.safeSub(currentTotalSupply);
-             maxAllowedAmount = remainingCap;
+           euint64 remainingCap = cap.safeSub(currentTotalSupply);
+           maxAllowedAmount = remainingCap;
         }
-        euint64 finalAmount = amount.validateAndCap(maxAllowedAmount);
+       euint64 finalAmount = amount.validateAndCap(maxAllowedAmount);
 
         if (!userPosition.initialized) {
             userPosition.initialized = true;
         }
 
-        FHE.allowTransient(finalAmount, asset);
+    // Grant transient permission to the asset (token) to consume the amount
+    // during confidentialTransferFrom.
+    FHE.allowTransient(finalAmount, asset);
         ConfidentialFungibleToken(asset).confidentialTransferFrom(
             msg.sender,
             address(this),
