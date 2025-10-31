@@ -11,5 +11,7 @@ import type * as oracle from "./oracle";
 export type { oracle };
 import type * as protocol from "./protocol";
 export type { protocol };
+import type * as testharness from "./testharness";
+export type { testharness };
 import type * as token from "./token";
 export type { token };

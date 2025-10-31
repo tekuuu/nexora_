@@ -79,7 +79,7 @@
     "prettier:check": "prettier --check \"**/*.{js,json,md,sol,ts,yml}\"",
     "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\"",
     "test": "hardhat test",
-    "test:unit": "hardhat test test/unit/**/*.spec.ts",
+    "test:unit": "hardhat test test/unit/*.spec.ts",
     "test:integration": "hardhat test test/integration/**/*.spec.ts --network sepolia",
     "test:integration:pull": "hardhat test test/integration/vault_pull_flow.spec.ts --network sepolia",
     "test:integration:push": "hardhat test test/integration/token_push_flow.spec.ts --network sepolia",

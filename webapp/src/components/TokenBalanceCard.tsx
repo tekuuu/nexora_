@@ -58,12 +58,12 @@ export default function TokenBalanceCard({
             <Typography variant="body2" sx={{
               fontWeight: '600',
               fontFamily: 'sans-serif',
-              color: isDarkMode ? 'white' : '#2c3e50'
+              color: isDarkMode ? 'white' : '#000000'
             }}>
               {asset.symbol}
             </Typography>
             <Typography variant="caption" sx={{
-              opacity: 0.7,
+              color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
               fontSize: '0.75rem'
             }}>
               {asset.name}
@@ -77,7 +77,7 @@ export default function TokenBalanceCard({
         <Typography variant="body2" sx={{
           fontWeight: '600',
           fontFamily: 'monospace',
-          color: isDarkMode ? 'white' : '#2c3e50'
+          color: isDarkMode ? 'white' : '#000000'
         }}>
           {isDecrypting ? (
             <CircularProgress size={16} sx={{ ml: 1 }} />

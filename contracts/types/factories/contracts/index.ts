@@ -6,4 +6,5 @@ export * as interfaces from "./interfaces";
 export * as libraries from "./libraries";
 export * as oracle from "./oracle";
 export * as protocol from "./protocol";
+export * as testharness from "./testharness";
 export * as token from "./token";

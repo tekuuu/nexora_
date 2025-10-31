@@ -146,6 +146,14 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.SupplyLogic__factory>;
     getContractFactory(
+      name: "BorrowLogicHarness",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.BorrowLogicHarness__factory>;
+    getContractFactory(
+      name: "SupplyLogicHarness",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.SupplyLogicHarness__factory>;
+    getContractFactory(
       name: "ConfidentialDAI",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ConfidentialDAI__factory>;
@@ -328,6 +336,16 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.SupplyLogic>;
     getContractAt(
+      name: "BorrowLogicHarness",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.BorrowLogicHarness>;
+    getContractAt(
+      name: "SupplyLogicHarness",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.SupplyLogicHarness>;
+    getContractAt(
       name: "ConfidentialDAI",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -481,6 +499,14 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SupplyLogic>;
     deployContract(
+      name: "BorrowLogicHarness",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BorrowLogicHarness>;
+    deployContract(
+      name: "SupplyLogicHarness",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SupplyLogicHarness>;
+    deployContract(
       name: "ConfidentialDAI",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ConfidentialDAI>;
@@ -662,6 +688,16 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SupplyLogic>;
+    deployContract(
+      name: "BorrowLogicHarness",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BorrowLogicHarness>;
+    deployContract(
+      name: "SupplyLogicHarness",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SupplyLogicHarness>;
     deployContract(
       name: "ConfidentialDAI",
       args: any[],

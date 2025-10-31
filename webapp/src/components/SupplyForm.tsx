@@ -237,6 +237,7 @@ export default function SupplyForm({
   const [transactionError, setTransactionError] = useState<string | null>(null);
   const [userCancelled, setUserCancelled] = useState(false);
   const [transactionPhase, setTransactionPhase] = useState<null | 'operator-approval' | 'supply'>(null);
+  const [isInTransactionFlow, setIsInTransactionFlow] = useState(false);
 
   // Balance validation with decryption and gas fees
   useEffect(() => {
@@ -356,47 +357,43 @@ export default function SupplyForm({
   // No need for duplicate validation logic here
 
   useEffect(() => {
-    console.log('Transaction success effect triggered:', { 
-      isSuccess, 
-      isReceiptError, 
-      isApproved, 
+    console.log('Transaction success effect triggered:', {
+      isSuccess,
+      isReceiptError,
+      isApproved,
       hash,
-      error: error?.message 
+      error: error?.message
     });
-    
+
     if (isSuccess && transactionPhase === 'operator-approval') {
-      // Operator permission was successful, now check operator status
-      console.log('Operator permission successful, checking status...');
-      setTimeout(() => {
-        console.log('Calling checkOperatorStatus...');
-        checkOperatorStatus();
-      }, 2000); // Wait 2 seconds for the transaction to be mined
-      // After approval receipt, if we had a pending amount, auto-supply it
+      // Operator permission was successful, immediately check operator status and proceed
+      console.log('Operator permission successful, checking status and proceeding...');
+      checkOperatorStatus();
+      // After approval receipt, if we had a pending amount, auto-supply it immediately
       if (pendingSupplyAmount) {
-        setTimeout(() => {
-          console.log('Auto-supplying after operator approval with amount:', pendingSupplyAmount);
-          performSupply(pendingSupplyAmount).catch((e) => console.error('Auto-supply failed:', e));
-          setPendingSupplyAmount(null);
-        }, 2500);
+        console.log('Auto-supplying after operator approval with amount:', pendingSupplyAmount);
+        setTransactionPhase('supply');
+        performSupply(pendingSupplyAmount).catch((e) => console.error('Auto-supply failed:', e));
+        setPendingSupplyAmount(null);
       }
-      setTransactionPhase(null);
     } else if (isSuccess && transactionPhase === 'supply') {
       // This is the supply transaction success
       console.log('✅ Supply transaction successful!');
       setShowSuccess(true);
       setTransactionPhase(null);
+      setIsInTransactionFlow(false);
       setAmount('');
       // DON'T reset isApproved here - operator permission persists!
       setTransactionError(null);
       setUserCancelled(false);
-      
+
       // Reset the write contract state to clear pending states
       setTimeout(() => {
         resetWrite();
       }, 100);
-      
+
       setTimeout(() => setShowSuccess(false), 5000);
-      
+
       // Refresh all dashboard balances
       if (onTransactionSuccess) {
         console.log('🔄 Refreshing dashboard balances after supply...');
@@ -413,7 +410,7 @@ export default function SupplyForm({
   useEffect(() => {
     if (error) {
       console.log('Transaction error:', error);
-      
+
       // Check if user rejected the transaction
       if (error.message.toLowerCase().includes('user rejected') ||
           error.message.toLowerCase().includes('user denied') ||
@@ -421,15 +418,17 @@ export default function SupplyForm({
         setUserCancelled(true);
         setTransactionError(null);
         setTransactionPhase(null);
+        setIsInTransactionFlow(false);
         setAmount(''); // Clear input on cancellation
       } else {
         // Other errors (network, contract, etc.)
         setTransactionError(parseTransactionError(error));
         setUserCancelled(false);
         setTransactionPhase(null);
+        setIsInTransactionFlow(false);
         setAmount(''); // Clear input on error
       }
-      
+
       // Reset the write contract state to clear pending states
       setTimeout(() => {
         resetWrite();
@@ -549,6 +548,7 @@ export default function SupplyForm({
         // Step 1: Set vault as operator (time-limited permission)
         console.log('Step 1: Setting vault as operator...');
         setTransactionPhase('operator-approval');
+        setIsInTransactionFlow(true);
         const until = Math.floor(Date.now() / 1000) + 3600; // Current timestamp + 1 hour
         console.log('setOperator parameters:', {
           address: asset.address,
@@ -894,8 +894,8 @@ export default function SupplyForm({
         variant="contained"
         size="medium"
         onClick={handleSupply}
-        disabled={!isValidAmount || isPending || isConfirming || isEncrypting || !hasAsset}
-        startIcon={isPending || isConfirming || isEncrypting ? <CircularProgress size={20} /> : undefined}
+        disabled={!isValidAmount || isPending || isConfirming || isEncrypting || isInTransactionFlow || !hasAsset}
+        startIcon={isPending || isConfirming || isEncrypting || isInTransactionFlow ? <CircularProgress size={20} /> : undefined}
         sx={{
           py: 1.2,
           borderRadius: '4px',
@@ -927,13 +927,15 @@ export default function SupplyForm({
         }}
       >
         {transactionPhase === 'operator-approval' && isPending
-          ? 'Setting Operator...'
+          ? 'Step 1 of 2: Setting Operator...'
           : transactionPhase === 'operator-approval' && isConfirming
-          ? 'Confirming Approval...'
+          ? 'Step 1 of 2: Confirming Approval...'
           : transactionPhase === 'supply' && (isPending || isEncrypting)
-          ? 'Supplying...'
+          ? 'Step 2 of 2: Supplying...'
           : transactionPhase === 'supply' && isConfirming
-          ? 'Confirming Supply...'
+          ? 'Step 2 of 2: Confirming Supply...'
+          : isInTransactionFlow
+          ? 'Processing...'
           : isApproved
           ? `Supply ${asset.symbol}`
           : 'Set Operator'}

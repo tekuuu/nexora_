@@ -172,6 +172,7 @@ export default function RepayForm({
   const [isApproved, setIsApproved] = useState(false);
   const [transactionPhase, setTransactionPhase] = useState<null | 'operator-approval' | 'repay'>(null);
   const [pendingRepayAmount, setPendingRepayAmount] = useState<string | null>(null);
+  const [isInTransactionFlow, setIsInTransactionFlow] = useState(false);
 
   const handleClose = useCallback(() => {
     if (onClose) onClose();
@@ -261,48 +262,44 @@ export default function RepayForm({
 
   // Handle successful transaction
   useEffect(() => {
-    console.log('Transaction success effect triggered:', { 
-      isSuccess, 
+    console.log('Transaction success effect triggered:', {
+      isSuccess,
       isReceiptError: false, // No isReceiptError in this component
-      isApproved, 
+      isApproved,
       hash,
       error: writeError?.message,
       transactionPhase
     });
-    
+
     if (isSuccess && transactionPhase === 'operator-approval') {
-      // Operator permission was successful, now check operator status
-      console.log('Operator permission successful, checking status...');
-      setTimeout(() => {
-        console.log('Calling checkOperatorStatus...');
-        checkOperatorStatus();
-      }, 2000); // Wait 2 seconds for the transaction to be mined
-      // After approval receipt, if we had a pending amount, auto-repay it
+      // Operator permission was successful, immediately check operator status and proceed
+      console.log('Operator permission successful, checking status and proceeding...');
+      checkOperatorStatus();
+      // After approval receipt, if we had a pending amount, auto-repay it immediately
       if (pendingRepayAmount) {
-        setTimeout(() => {
-          console.log('Auto-repaying after operator approval with amount:', pendingRepayAmount);
-          performRepay(pendingRepayAmount).catch((e) => console.error('Auto-repay failed:', e));
-          setPendingRepayAmount(null);
-        }, 2500);
+        console.log('Auto-repaying after operator approval with amount:', pendingRepayAmount);
+        setTransactionPhase('repay');
+        performRepay(pendingRepayAmount).catch((e) => console.error('Auto-repay failed:', e));
+        setPendingRepayAmount(null);
       }
-      setTransactionPhase(null);
     } else if (isSuccess && transactionPhase === 'repay') {
       // This is the repay transaction success
       console.log('✅ Repay transaction successful!');
       setShowSuccess(true);
       setTransactionPhase(null);
+      setIsInTransactionFlow(false);
       setAmount('');
       // DON'T reset isApproved here - operator permission persists!
       setTransactionError(null);
       setUserCancelled(false);
-      
+
       // Reset the write contract state to clear pending states
       setTimeout(() => {
         resetWrite();
       }, 100);
-      
+
       setTimeout(() => setShowSuccess(false), 5000);
-      
+
       // Refresh all dashboard balances
       if (onTransactionSuccess) {
         console.log('🔄 Refreshing dashboard balances after repay...');
@@ -317,7 +314,7 @@ export default function RepayForm({
   useEffect(() => {
     if (writeError) {
       console.log('Transaction error:', writeError);
-      
+
       // Check if user rejected the transaction
       if (writeError.message.toLowerCase().includes('user rejected') ||
           writeError.message.toLowerCase().includes('user denied') ||
@@ -325,15 +322,17 @@ export default function RepayForm({
         setUserCancelled(true);
         setTransactionError(null);
         setTransactionPhase(null);
+        setIsInTransactionFlow(false);
         setAmount(''); // Clear input on cancellation
       } else {
         // Other errors (network, contract, etc.)
         setTransactionError(parseTransactionError(writeError));
         setUserCancelled(false);
         setTransactionPhase(null);
+        setIsInTransactionFlow(false);
         setAmount(''); // Clear input on error
       }
-      
+
       // Reset the write contract state to clear pending states
       setTimeout(() => {
         resetWrite();
@@ -420,6 +419,7 @@ export default function RepayForm({
         // Step 1: Set vault as operator (time-limited permission)
         console.log('Step 1: Setting vault as operator...');
         setTransactionPhase('operator-approval');
+        setIsInTransactionFlow(true);
         const until = Math.floor(Date.now() / 1000) + 3600; // Current timestamp + 1 hour
         console.log('setOperator parameters:', {
           address: asset.address,
@@ -592,6 +592,7 @@ export default function RepayForm({
     isPending ||
     isConfirming ||
     isProcessing ||
+    isInTransactionFlow ||
     !isConnected ||
     !!balanceError; // Block transaction if there's any balance error
 
@@ -837,7 +838,7 @@ export default function RepayForm({
           }}
         />
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontFamily: 'sans-serif' }}>
-          This will clear your entire debt position for this asset. The amount entered must cover your full borrowed balance and you must have sufficient wallet balance (confidential tokens) to cover the repayment.
+          This will clear your entire debt position for this asset. 
         </Typography>
         <Typography variant="caption" color="error" sx={{ display: isDecrypted ? 'none' : 'block', mt: 0.5, fontFamily: 'sans-serif' }}>
           Repay All requires your borrowed balance to be decrypted so the exact amount can be verified. Please decrypt your balance or uncheck &quot;Repay All Debt&quot;.
@@ -923,7 +924,7 @@ export default function RepayForm({
         size="medium"
         onClick={handleRepay}
         disabled={disabled}
-        startIcon={isPending || isConfirming || isProcessing ? <CircularProgress size={20} /> : undefined}
+        startIcon={isPending || isConfirming || isProcessing || isInTransactionFlow ? <CircularProgress size={20} /> : undefined}
         sx={{
           py: 1.2,
           borderRadius: '4px',
@@ -955,13 +956,15 @@ export default function RepayForm({
         }}
       >
         {transactionPhase === 'operator-approval' && isPending
-          ? 'Setting Operator...'
+          ? 'Step 1 of 2: Setting Operator...'
           : transactionPhase === 'operator-approval' && isConfirming
-          ? 'Confirming Approval...'
+          ? 'Step 1 of 2: Confirming Approval...'
           : transactionPhase === 'repay' && (isPending || isProcessing)
-          ? 'Repaying...'
+          ? 'Step 2 of 2: Repaying...'
           : transactionPhase === 'repay' && isConfirming
-          ? 'Confirming Repay...'
+          ? 'Step 2 of 2: Confirming Repay...'
+          : isInTransactionFlow
+          ? 'Processing...'
           : isApproved
           ? `Repay ${asset.symbol}`
           : 'Set Operator'}

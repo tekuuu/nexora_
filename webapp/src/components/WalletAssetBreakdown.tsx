@@ -50,12 +50,12 @@ export default function WalletAssetBreakdown({
           <Typography variant="h6" sx={{
             fontWeight: '600',
             mb: 3,
-            color: isDarkMode ? 'white' : '#2c3e50',
+            color: isDarkMode ? 'white' : '#000000',
             fontFamily: 'sans-serif'
           }}>
             Wallet Assets
           </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.7, textAlign: 'center', py: 4 }}>
+          <Typography variant="body2" sx={{ color: isDarkMode ? 'white' : '#000000', opacity: 0.7, textAlign: 'center', py: 4 }}>
             No confidential tokens in wallet
           </Typography>
         </CardContent>
@@ -82,7 +82,7 @@ export default function WalletAssetBreakdown({
         <Typography variant="h6" sx={{
           fontWeight: '600',
           mb: 3,
-          color: isDarkMode ? 'white' : '#2c3e50',
+          color: isDarkMode ? 'white' : '#000000',
           fontFamily: 'sans-serif'
         }}>
           Wallet Assets

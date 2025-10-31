@@ -2254,7 +2254,7 @@ export default function Dashboard(): JSX.Element {
                   <Box>
             {/* Portfolio Overview Section */}
             <Card sx={{
-              mb: { xs: 2, sm: 3 },
+              mb: { xs: 1, sm: 0.5 },
               background: isDarkMode
                 ? 'linear-gradient(135deg, #34495e 0%,  #1f2325ff 0%)'
                 : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 100%)',
@@ -2299,7 +2299,7 @@ export default function Dashboard(): JSX.Element {
 
             {/* Portfolio Positions - Combined Supplies and Borrows */}
             <Card sx={{
-              mb: 2,
+              mb: 1,
               background: isDarkMode
                 ? 'linear-gradient(135deg, #011931ff 0%, #1f2325ff 0%)'
                 : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 0%)',
@@ -2354,7 +2354,7 @@ export default function Dashboard(): JSX.Element {
         {activeTab === 'markets' && (
           <Box>
             <Card sx={{
-              mb: 2,
+              mb: 1,
               background: isDarkMode
                 ? 'linear-gradient(135deg, #011931ff 0%, #1f2325ff 0%)'
                 : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 0%)',
@@ -2392,17 +2392,17 @@ export default function Dashboard(): JSX.Element {
           <Box>
             {/* Portfolio Header */}
             <Card sx={{
-              mt:0.15, 
-              mb: 3, 
-              background: isDarkMode 
+              mt:0.15,
+              mb: 1.5,
+              background: isDarkMode
                 ? 'linear-gradient(135deg,  #011931ff 0%, #1f2325ff 0%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+                : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 100%)',
               color: isDarkMode ? 'white' : '#000000',
               borderRadius: '0px',
-              border: isDarkMode 
+              border: isDarkMode
                 ? '1px solid rgba(255, 255, 255, 0.1)'
                 : '1px solid rgba(44, 62, 80, 0.1)',
-              boxShadow: isDarkMode 
+              boxShadow: isDarkMode
                 ? '0 4px 20px rgba(0, 0, 0, 0.3)'
                 : '0 4px 20px rgba(0, 0, 0, 0.1)'
             }}>
@@ -2469,13 +2469,13 @@ export default function Dashboard(): JSX.Element {
                       <Grid container spacing={{ xs: 2, sm: 3, md: 3 }} sx={{ mb: 4 }}>
                         <Grid item xs={12}>
                           <Tooltip title="Total number of active supply and borrow positions" arrow placement="top">
-                            <Card sx={{ p: { xs: 2, sm: 3 }, borderRadius: '8px', background: isDarkMode ? 'linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.02) 100%)' : 'linear-gradient(135deg, rgba(139,92,246,0.03) 0%, rgba(139,92,246,0.01) 100%)', border: `2px solid ${isDarkMode ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.08)'}`, '&:hover': { transform: 'scale(1.02)', transition: 'all 0.3s ease' } }}>
+                            <Card sx={{ p: { xs: 2, sm: 3 }, borderRadius: '0px', background: isDarkMode ? 'linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.02) 100%)' : 'linear-gradient(135deg, rgba(139,92,246,0.03) 0%, rgba(139,92,246,0.01) 100%)', border: `2px solid ${isDarkMode ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.08)'}`, '&:hover': { transform: 'scale(1)', transition: 'all 0.3s ease' } }}>
                               <Box display="flex" alignItems="center" gap={2}>
-                               
+
                                 <Box>
-                                  <Typography variant="body2" sx={{ opacity: isDarkMode ? 0.9 : 0.8 }}>Active Positions</Typography>
-                                  <Typography variant="h4" sx={{ fontWeight: 600 }}>{activePositionsCount}</Typography>
-                                  <Typography variant="caption" sx={{ opacity: 0.6 }}>Supply + Borrow</Typography>
+                                  <Typography variant="body2" sx={{ opacity: isDarkMode ? 0.9 : 0.8, color: isDarkMode ? 'white' : '#000000' }}>Active Positions</Typography>
+                                  <Typography variant="h4" sx={{ fontWeight: 600, color: isDarkMode ? 'white' : '#000000' }}>{activePositionsCount}</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.6, color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>Supply + Borrow</Typography>
                                 </Box>
                               </Box>
                             </Card>
@@ -2497,14 +2497,14 @@ export default function Dashboard(): JSX.Element {
                     <Card sx={{
                       flexGrow: 1,
                       width: '50%',
-                      mb: 1,
-                      background: isDarkMode 
+                      mb: 0.5,
+                      background: isDarkMode
                         ? 'rgba(255, 255, 255, 0.08)'
                         : 'rgba(44, 62, 80, 0.08)',
-                      border: isDarkMode 
+                      border: isDarkMode
                         ? '2px solid rgba(255, 255, 255, 0.2)'
                         : '2px solid rgba(44, 62, 80, 0.3)',
-                      boxShadow: isDarkMode 
+                      boxShadow: isDarkMode
                         ? '0 2px 8px rgba(0, 0, 0, 0.2)'
                         : '0 2px 8px rgba(44, 62, 80, 0.1)'
                     }}>
