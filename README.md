@@ -25,10 +25,8 @@
 - [Project Structure](#project-structure)
 - [Smart Contracts Setup](#smart-contracts-setup)
 - [Webapp Setup](#webapp-setup)
-- [Development Workflow](#development-workflow)
 - [Testing](#testing)
 - [Deployment](#deployment)
-- [CI/CD](#cicd)
 - [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
@@ -41,7 +39,7 @@
 
 ## About
 
-Nexora is a next-generation confidential lending platform that brings true financial privacy to decentralized finance. Built on [FHEVM](https://github.com/zama-ai/fhevm) (Fully Homomorphic Encryption Virtual Machine) by [Zama](https://www.zama.ai/), Nexora enables users to supply collateral, borrow assets, and manage their positions without exposing sensitive financial data on-chain.
+Nexora is a next-generation confidential lending protocol that brings true financial privacy to decentralized finance. Built on [FHEVM](https://github.com/zama-ai/fhevm) (Fully Homomorphic Encryption Virtual Machine) by [Zama](https://www.zama.ai/), Nexora enables users to supply collateral, borrow assets, and manage their positions without exposing sensitive financial data on-chain.
 
 ---
 
@@ -53,14 +51,6 @@ Nexora is a next-generation confidential lending platform that brings true finan
 - **Hidden Collateral Positions**: Users' collateral status is not publicly visible
 - **Confidential Repayment Amounts**: Repayment transactions maintain privacy
 - **Private Withdrawal Amounts**: Withdrawal values are kept encrypted
-
-### Core Lending Features 💰
-- **Multi-Asset Support**: Supports USDC, DAI, and WETH
-- **Collateralized Borrowing**: Borrow against supplied assets as collateral
-- **Dynamic Interest Rates**: Adaptive rates based on supply/demand
-- **Liquidation Protection**: Safeguards against under-collateralization
-- **Price Oracle Integration**: Real-time price feeds for accurate valuations
-- **Token Swapping**: Confidential token exchange functionality
 
 ### Current Protocol Behavior & Limitations ⚠️
 
@@ -74,12 +64,11 @@ This project is an early-stage, privacy-first lending prototype. To keep the ini
 - **HCU Limit:** HCU here refers to Homomorphic Computation Unit — the computation budget unit used by Zama's FHEVM. The prototype enforces HCU caps as part of a simplified safety and performance model (for example, a per-transaction sequential budget on the order of ~5,000,000 HCU and a global budget on the order of ~20,000,000 HCU). These limits make certain confidential computations and multi-asset operations challenging. We are actively researching and developing innovative optimizations (batching, algorithmic reductions, and approximate/cheaper homomorphic patterns) to minimize HCU consumption and enable richer protocol features in future releases.
 - **Price Oracle:** For the sake of simplicity and testing, the protocol currently uses a fixed/static price oracle. Production deployments should replace this with a live/secure price feed.
 
-These limitations are intentional. The roadmap includes implementing interest rate models, liquidation logic, multi-asset borrow support, and tunable HCU parameters. See the "Future works" section for planned improvements.
+These limitations are intentional. The roadmap includes implementing interest rate models, liquidation logic, multi-asset borrow support, and tunable HCU parameters. See the Roadmap section for planned improvements.
 
 ### User Interface 🎨
 - **Modern Material-UI Design**: Clean, responsive interface
 - **Real-time Balance Updates**: Live updates of encrypted balances
-- **Transaction History Tracking**: Comprehensive transaction logs
 - **Wallet Integration**: ConnectKit and WalletConnect support
 - **Admin Dashboard**: Protocol management interface for administrators
 
@@ -141,7 +130,7 @@ The user interface is built with modern web technologies:
 ### Required Software
 - **Node.js 20 or higher** - Check with: `node --version`
 - **npm 7.0.0 or higher** - Check with: `npm --version`
-- **Git** - For cloning the repository
+- **Git** - for version control
 
 ### Recommended Tools
 - **VS Code or similar IDE** - For development
@@ -151,12 +140,7 @@ The user interface is built with modern web technologies:
 ### Accounts and Keys
 - **Ethereum wallet with Sepolia testnet ETH** - [Get from Sepolia Faucet](https://sepoliafaucet.com/)
 - **Infura or Alchemy API key** - For RPC access (optional for local development)
-- **Vercel account** - For frontend deployment
-
-### Knowledge Prerequisites
-- Basic understanding of Ethereum and smart contracts
-- Familiarity with React and Next.js
-- Understanding of DeFi lending protocols (helpful but not required)
+- **Hosting provider account (optional)** - For frontend deployment/CI (e.g., Vercel, Netlify, etc.)
 
 ---
 
@@ -164,8 +148,8 @@ The user interface is built with modern web technologies:
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/[username]/nexora.git
-cd nexora
+git clone https://github.com/tekuuu/nexora_.git
+cd nexora_
 ```
 
 ### Install Dependencies (Both Projects)
@@ -180,7 +164,7 @@ npm install
 ```
 
 ### Set Up Environment Variables
-- **Contracts**: Create `.env` in `contracts/` directory (reference `contracts/.env.example` if it exists)
+- **Contracts**: Create `.env` in `contracts/` directory (reference `contracts/.env.example` )
 - **Webapp**: Copy `webapp/env.example` to `webapp/.env.local` and configure variables
 
 ### Run Local Development
@@ -217,6 +201,10 @@ nexora/
 │   │   └── token/          # Confidential token contracts
 │   ├── deploy/             # Deployment scripts
 │   ├── deployments/        # Deployment artifacts
+│   ├── test/               # Tests for smart contracts
+│   │   ├── unit/           # Isolated unit tests (Mocha/Chai)
+│   │   ├── integration/    # Cross-contract and network tests
+│   │   └── helpers/        # Shared test utilities and fixtures
 │   ├── types/              # TypeChain generated types
 │   ├── hardhat.config.ts   # Hardhat configuration
 │   └── package.json        # Contracts dependencies
@@ -340,11 +328,9 @@ cp env.example .env.local
 ```
 
 Configure required variables in `.env.local`:
+You can use the following addresses if you’re not deploying fresh contracts:
 
 ```env
-# Network Configuration
-NEXT_PUBLIC_CHAIN_ID=11155111
-NEXT_PUBLIC_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
 
 # Standard Tokens
 NEXT_PUBLIC_WETH=0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9
@@ -360,16 +346,17 @@ NEXT_PUBLIC_CONFIDENTIAL_DAI=0xd57a787BfDb9C86c0B1E0B5b7a316f8513F2E0D1
 # Protocol Contracts
 # Core lending protocol contract addresses deployed on Sepolia.
 NEXT_PUBLIC_TOKEN_SWAPPER=0xD662eC4370081be9d7Fca9599ad3E8f60235e7d9
-NEXT_PUBLIC_LENDING_POOL=0xc24bA6c1958EEB0B33778c7eF864d71F9B1094De
-NEXT_PUBLIC_POOL_CONFIGURATOR=0xF78b2ed527854458Bd1119e43a01101CE5a08CF2
-NEXT_PUBLIC_PRICE_ORACLE=0x0B8F2b631b6DfBd97695FBF672B18c3A9941E5cD
-NEXT_PUBLIC_ACL_MANAGER=0xC9576182dBAbd04d441D7ac948062634CA99549A
+
+NEXT_PUBLIC_LENDING_POOL=0x7e313CE900b8ba58368240925b5c5105F64c3c5a
+NEXT_PUBLIC_POOL_CONFIGURATOR=0x744EC374B4a1A1F0433E31EEfc674E8Ff87E2347
+NEXT_PUBLIC_PRICE_ORACLE=0xF6fb7E6e3d066fF69abca5587496C3E3911d9d98
+NEXT_PUBLIC_ACL_MANAGER=0x30386680F2aF31ACa148795f2efBba6f32821d86
 ```
 
 Find deployed contract addresses in `contracts/deployments/sepolia/`.
 
-### Webapp deployment
-Webapp hosting and CI/CD instructions are maintained in the `webapp/` folder. Vercel-specific instructions have been omitted from this top-level README to keep this document focused; see `webapp/README.md` (or the `webapp/` deployment docs) for hosting and environment variable details.
+
+### Branch Strategy
 - `develop` - Development branch
 - `feature/feature-name` - Feature branches
 - `bugfix/bug-name` - Bugfix branches
@@ -430,11 +417,6 @@ Use conventional commits format:
 - Run with: `npm run test:integration`
 - Require Sepolia testnet access and funded wallet
 
-#### Coverage
-- Generate coverage report: `npm run coverage`
-- View report in `coverage/` directory
-- Aim for >80% coverage
-
 #### Writing Tests
 - Use Hardhat's testing framework (Mocha + Chai)
 - Use `@fhevm/mock-utils` for testing encrypted operations
@@ -469,7 +451,6 @@ Frontend testing framework setup is a future enhancement. Can be added using:
 - ✅ Withdraw supplied assets
 - ✅ Check balance encryption/decryption
 - ✅ Test admin functions (if applicable)
-- ✅ Verify transaction history
 
 ---
 
@@ -509,39 +490,13 @@ Frontend testing framework setup is a future enhancement. Can be added using:
  - ✅ Security scan passed
  - ✅ Documentation updated
 
----
 
-## CI/CD
-
-### Overview
-The project uses GitHub Actions for automated CI/CD with three workflows ensuring code quality and security.
-
-### Workflows
-- **Contracts CI**: Validates smart contract code on every push/PR affecting `contracts/**`
-- **Webapp CI**: Validates frontend code on every push/PR affecting `webapp/**`
-- **Security Scanning**: Weekly scans + PR checks for vulnerabilities
-
-### Workflow Details
-See [`.github/workflows/README.md`](.github/workflows/README.md) for detailed documentation. Workflows follow 2025 best practices.
-
-### Status Badges
-Badges at the top of this README show current CI status. Green = passing, Red = failing.
-
-### Viewing Results
-- GitHub Actions tab shows all workflow runs
-- PR checks show status inline
-- Security tab shows CodeQL and dependency scan results
-
-### Local Execution
-Developers can run the same checks locally before pushing. See workflow README for specific commands.
-
----
 
 ## Security
 
 ### Security Measures
-- **Automated Dependency Scanning**: npm audit for vulnerabilities
 - **Static Code Analysis**: CodeQL for security issues
+- **Automated Dependency Scanning**: npm audit via CI workflows
 - **Role-Based Access Control**: ACL Manager in smart contracts
 - **Reentrancy Protection**: Guards against attacks
 - **Input Validation**: Sanitization and validation
@@ -550,26 +505,9 @@ Developers can run the same checks locally before pushing. See workflow README f
 ### Reporting Vulnerabilities
 Please report security vulnerabilities responsibly. Contact the maintainers directly or use GitHub's security advisory feature.
 
-### Security Best Practices
-- Never commit private keys or secrets
-- Use environment variables for sensitive data
-- Keep dependencies updated
-- Review security scan results regularly
-- Follow smart contract security guidelines
 
-### Audit Status
-Smart contracts are based on OpenZeppelin libraries and FHEVM templates. Professional audit recommended before mainnet deployment.
-
-### Known Issues
-- FHEVM is experimental technology
-- Use testnet for evaluation
-- Gas costs may be higher due to encryption operations
-
----
 
 ## Contributing
-
-### Welcome Message
 We welcome contributions from the community! Whether it's code, documentation, bug reports, or feature requests, your input helps improve Nexora.
 
 ### How to Contribute
@@ -602,9 +540,6 @@ We adhere to a standard open-source code of conduct. Be respectful and inclusive
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
 
 Copyright (c) 2025 Tekalign
-
-*Note: The contracts package.json references BSD-3-Clause-Clear license from the FHEVM template, but the root project uses MIT.*
-
 ---
 
 ## Acknowledgments
@@ -613,7 +548,7 @@ Copyright (c) 2025 Tekalign
 - **Zama** for FHEVM technology
 - **OpenZeppelin** for confidential contracts library
 - **Hardhat** for development framework
-- **Vercel** for hosting
+- **Hosting providers (e.g., Vercel)** for frontend hosting
 
 ### Inspiration
 Inspired by leading DeFi protocols like Aave and Compound, adapted for privacy-preserving operations.
@@ -630,7 +565,7 @@ Thanks to all contributors and the DeFi community for their support.
 
 ## Roadmap
 
-We intentionally kept the initial implementation focused and limited some functionality to simplify development and testing (see "Current Protocol Behavior & Limitations"). The roadmap below prioritizes work required to remove current prototype constraints and prepare the protocol for production.
+We intentionally kept the initial implementation focused and limited some functionality to simplify development and testing (see "Current Protocol Behavious & Limitations"). The roadmap below prioritizes work required to remove current prototype constraints and prepare the protocol for production.
 
 Protocol mechanics (near-term)
 - [ ] Interest rate models — implement supply/borrow interest accrual and configurable rate strategies
@@ -668,9 +603,8 @@ This is experimental technology. Use testnet for evaluation.
 ## Contact
 
 - **Project Maintainers**: Tekalign
-- **GitHub**: [https://github.com/[username]/nexora](https://github.com/[username]/nexora)
-- **Twitter**: [@nexora_protocol](https://twitter.com/nexora_protocol)
-- **Discord**: [Join our community](https://discord.gg/nexora)
+- **GitHub**: https://github.com/tekuuu/nexora_
+- **Email**: tekalign3330@gmail.com
 
 For questions or support, please use GitHub Issues or Discussions.
 

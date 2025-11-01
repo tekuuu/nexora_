@@ -40,7 +40,6 @@ import SupplyForm from './SupplyForm';
 import WithdrawForm from './WithdrawForm';
 import BorrowForm from './BorrowForm';
 import RepayForm from './RepayForm';
-import TransactionHistoryTable from './TransactionHistoryTable';
 import WalletAssetBreakdown from './WalletAssetBreakdown';
 import styles from './SwapStyles.module.css';
 import MarketsTab from './MarketsTab';
@@ -2505,7 +2504,30 @@ export default function Dashboard(): JSX.Element {
                 
                 {/* Transaction History Content */}
                 {portfolioSubTab === 'history' && (
-                  <TransactionHistoryTable isDarkMode={isDarkMode} />
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 200,
+                    background: isDarkMode
+                      ? 'rgba(255, 255, 255, 0.06)'
+                      : 'rgba(44, 62, 80, 0.06)',
+                    border: isDarkMode
+                      ? '1px dashed rgba(255, 255, 255, 0.2)'
+                      : '1px dashed rgba(44, 62, 80, 0.2)',
+                    borderRadius: '4px'
+                  }}>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.85)',
+                        textAlign: 'center',
+                        fontWeight: 600
+                      }}
+                    >
+                      Coming soon
+                    </Typography>
+                  </Box>
                 )}
               </CardContent>
             </Card>
