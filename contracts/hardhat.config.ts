@@ -23,9 +23,18 @@ const config: HardhatUserConfig = {
   namedAccounts: {
     deployer: 0,
   },
-  // @ts-expect-error: extended by @fhevm/hardhat-plugin at runtime
   fhevm: {
     network: "sepolia",
+  },
+  etherscan: {
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
+    },
+  },
+  gasReporter: {
+    currency: "USD",
+    enabled: process.env.REPORT_GAS ? true : false,
+    excludeContracts: [],
   },
   networks: {
     hardhat: {
@@ -45,7 +54,7 @@ const config: HardhatUserConfig = {
       accounts: [PRIVATE_KEY],
       chainId: 11155111,
       url: INFURA_API_KEY ? `https://sepolia.infura.io/v3/${INFURA_API_KEY}` : "https://rpc.sepolia.org",
-      timeout: 1200000, // Increased to 3 minutes
+      timeout: 1200000,  // Increased to 3 minutes
       gasPrice: "auto",
       gas: "auto",
     },

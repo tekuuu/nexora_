@@ -24,10 +24,18 @@ jobs:
     defaults:
       run:
         working-directory: webapp
+    env:
+      NEXT_PUBLIC_CHAIN_ID: '11155111'
+      # Use a GitHub Actions secret for the Infura RPC URL so the key itself
+      # isn't checked into the repo. Create a repository secret named
+      # `INFURA_RPC_URL` (see instructions below).
+      NEXT_PUBLIC_RPC_URL: ${{ secrets.INFURA_RPC_URL }}
+      NEXT_PUBLIC_WETH: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9'
+      NEXT_PUBLIC_USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'
+      NEXT_PUBLIC_DAI: '0x75236711d42D0f7Ba91E03fdCe0C9377F5b76c07'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
-
+        uses: actions/checkout@v4
       - name: Setup Node.js environment
         uses: actions/setup-node@v6
         with:
