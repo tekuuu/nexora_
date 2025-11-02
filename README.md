@@ -72,6 +72,13 @@ These limitations are intentional. The roadmap includes implementing interest ra
 - **Wallet Integration**: ConnectKit and WalletConnect support
 - **Admin Dashboard**: Protocol management interface for administrators
 
+### User UI notes — master decryption (unlock / lock)
+- Master unlock: the frontend can create a master decryption signature (EIP-712) that lets the app decrypt a user's confidential balances. Implementation: `webapp/src/hooks/useMasterDecryption.ts` and `webapp/src/utils/FhevmDecryptionSignature.ts`.
+- Storage: the signature (and generated keypair) is stored in browser localStorage under keys like `fhe_master_decryption_<userAddress>` and related entries. The signature has a default validity (365 days) but is treated as invalid if the set of contract addresses changes.
+- How it works: unlocking requires an on-wallet EIP-712 signature (the private key never leaves the user's wallet). The hook ties the signature to a deterministic set of contract addresses so signatures are only valid for the intended contracts.
+- Locking: calling the lock action clears the localStorage entries and prevents further decryption until the user unlocks again. The UI exposes `unlockAllBalances` and `lockAllBalances` (from `useMasterDecryption`) — recommend calling `lockAllBalances` on logout or on shared devices.
+- Security guidance (short): the signature and keypair live in the browser. Treat the browser as sensitive storage: do not use shared/public machines, and provide an explicit lock/timeout in the UI. Developers: clear signature on disconnect and when contract addresses change (already implemented in the hook).
+
 ### Security 🛡️
 - **Role-Based Access Control**: ACL Manager for granular permissions
 - **Reentrancy Protection**: Guards against common smart contract attacks
@@ -101,53 +108,25 @@ The smart contracts layer forms the core of the lending protocol:
 - **Oracle**: `SimplePriceOracle` for price feeds
 - **Utility Libraries**: `SafeFHEOperations`, `AssetUtils`, `SafeMath64`
 
-## Administration & Roles
+## Administration
 
-This project implements on-chain role-based administration and a dedicated admin UI in the frontend. The README below describes the concrete roles, the contract-level capabilities they grant, and where the admin UI lives in the codebase.
+On-chain roles (see `contracts/access/ACLManager.sol` & `contracts/config/Constants.sol`):
+- DEFAULT_ADMIN_ROLE — initial owner.
+- POOL_ADMIN — manage pool/configurator (examples: `initReserve`, `setReserveActive`, `setReserveBorrowing`, `setLendingPool`, `setConfigurator`, `setPriceOracle`, `setCollateralAsset`).
+- RISK_ADMIN — risk parameters (`setCollateralFactor`, `setSupplyCap`, `setBorrowCap`, `pauseReserve`, `unpauseReserve`).
+- EMERGENCY_ADMIN — emergency actions (`pause` / `unpause` protocol).
 
-### Roles (on-chain)
-- `DEFAULT_ADMIN_ROLE` (inherited from OpenZeppelin AccessControl) — initial owner granted in `contracts/access/ACLManager.sol` constructor.
-- `POOL_ADMIN` — role identifier `keccak256("POOL_ADMIN")`. Pool admins can perform protocol configuration tasks (see capabilities below). Declared in `contracts/config/Constants.sol` and enforced by `contracts/access/ACLManager.sol`.
-- `RISK_ADMIN` — role identifier `keccak256("RISK_ADMIN")`. Risk admins are allowed to change risk-sensitive parameters (collateral factors, caps, pause reserves).
-- `EMERGENCY_ADMIN` — role identifier `keccak256("EMERGENCY_ADMIN")`. Emergency admins (or pool admins) can pause/unpause the protocol in urgent situations.
+Frontend admin UI (files):
+- Entry: `webapp/src/app/admin/page.tsx` (theme + layout).
+- Main: `webapp/src/components/admin/AdminDashboardMain.tsx` (tabs load Reserves, Add Reserve, Configure, Prices, Roles, Emergency panels).
+- Config & ABIs: `webapp/src/config/admin/*` (`adminConfig.ts`, `adminABI.ts`, `adminContracts.ts`).
 
-These roles are exposed by `ACLManager` and can be queried/granted/revoked via the standard `hasRole`, `grantRole`, and `revokeRole` functions (the ACL manager ABI is used by the frontend).
+Enable admin access: set `NEXT_PUBLIC_ADMIN_WALLETS` (comma-separated) in `webapp/.env.local`; the UI uses `isAdminWallet` to gate `/admin` routes (`webapp/src/config/admin/adminConfig.ts`).
 
-### Contract-level admin capabilities (what the code allows)
-- PoolConfigurator (`contracts/protocol/ConfidentialPoolConfigurator.sol`):
-	- onlyPoolAdmin: `setLendingPool`, `initReserve`, `setReserveActive`, `setReserveBorrowing`, `setReserveCollateral`, `setLendingPool` (sets the linked lending pool).
-	- onlyRiskAdmin: `setCollateralFactor`, `setSupplyCap`, `setBorrowCap`, `pauseReserve`, `unpauseReserve`.
-	- When the configurator updates reserve state it syncs to the lending pool via `updateReserveConfig`.
-- LendingPool (`contracts/protocol/ConfidentialLendingPool.sol`):
-	- onlyPoolAdmin: `setConfigurator`, `setPriceOracle`, `setCollateralAsset`.
-	- onlyEmergencyAdmin (or pool admin): `pause` and `unpause` the entire protocol.
+Quick facts for developers:
+- UI actions map directly to on-chain ABI functions (e.g. `initReserve`, `setCollateralFactor`, `setSupplyCap`, `setBorrowCap`, `pauseReserve`, `setPrice`/`setPrices`, `grantRole`/`revokeRole`, `pause`/`unpause`).
+- All admin capabilities in the UI are supported by the contracts; check the configurator (`ConfidentialPoolConfigurator.sol`) and pool (`ConfidentialLendingPool.sol`) for exact checks and modifiers.
 
-These capabilities are enforced via the `ACLManager` checks in the contracts and are reflected in the ABI files used by the frontend (see below).
-
-### Admin UI (frontend)
-- The admin dashboard is implemented in the Next.js frontend under `webapp/src/app/admin` and admin components under `webapp/src/components/admin/`.
-	- Admin page entry: `webapp/src/app/admin/page.tsx` (wraps `AdminLayout` and `AdminDashboardMain`).
-	- Main dashboard/controls: `webapp/src/components/admin/AdminDashboardMain.tsx` with tabs that load:
-		- `ReservesPanel`, `AddReservePanel`, `ReserveConfigPanel` — for initializing and configuring reserves.
-		- `PricesPanel` — for setting oracle prices (uses the `ORACLE_ABI` functions `setPrice`/`setPrices`).
-		- `RolesPanel` / `RolesPanelEnhanced` — UI for role management (uses ACL ABI: `grantRole` / `revokeRole` / `hasRole`).
-		- `EmergencyPanel` — pause/unpause actions mapped to the lending pool `pause`/`unpause` functions.
-
-- Admin contract configuration and ABIs are under `webapp/src/config/admin/`:
-	- `adminConfig.ts` — admin routes, nav items and helper `isAdminWallet` that gates UI access.
-	- `adminABI.ts` and `adminContracts.ts` — ABI snippets and the addresses used to call admin functions from the UI.
-	- The webapp reads the list of authorized admin wallet addresses from the environment variable `NEXT_PUBLIC_ADMIN_WALLETS` (see `webapp/env.example` and `webapp/src/config/contracts.ts`) — add your admin addresses to `webapp/.env.local` as a comma-separated list.
-
-### How to use admin features (concrete)
-- To enable the dashboard for a wallet, add its address to `NEXT_PUBLIC_ADMIN_WALLETS` in `webapp/.env.local` (see `webapp/env.example`). The frontend validates the address format on startup and lower-cases entries.
-- From the admin dashboard you can:
-	- Initialize reserves (`initReserve`) and enable/disable borrowing for assets.
-	- Configure reserve parameters (collateral factor, supply/borrow caps).
-	- Update oracle prices (the prototype uses `SimplePriceOracle` — see `contracts/oracle/SimplePriceOracle.sol`).
-	- Grant and revoke roles using the ACL manager ABI (`grantRole`, `revokeRole`).
-	- Perform emergency actions: pause/unpause a reserve, or pause/unpause the entire protocol.
-
-All of the UI actions are wired to the on-chain ABI definitions present in `webapp/src/config/admin/*` and call the exact contract functions listed above — there are no admin features in the UI that are not supported by the contracts.
 
 ### FHEVM Integration
 FHEVM enables fully homomorphic encryption on Ethereum:
