@@ -46,7 +46,8 @@ jobs:
       - name: Generate audit report
         if: failure()
         working-directory: ${{ matrix.directory }}
-        run: npm audit --json > audit-report-${{ matrix.directory }}.json
+        # Ensure this step does not cause the job to exit non-zero when npm audit returns vulnerabilities
+        run: npm audit --json > audit-report-${{ matrix.directory }}.json || true
 
       - name: Upload audit report
         if: failure()

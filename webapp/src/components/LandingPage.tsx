@@ -76,7 +76,6 @@ export default function LandingPage() {
               height={40}
               style={{
                 marginRight: '12px',
-                filter: 'brightness(0) invert(1)',
               }}
             />
             <Typography
@@ -303,7 +302,6 @@ export default function LandingPage() {
                   height={32}
                   style={{
                     marginRight: '8px',
-                    filter: 'brightness(0) invert(1)',
                   }}
                 />
                 <Typography
