@@ -42,44 +42,62 @@ const publicKeyStorage = new Map<string, { publicKey: string; publicParams: any 
 // Load Zama Relayer SDK from CDN (like the official example)
 const loadRelayerSDK = async (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    // Try multiple CDN URLs in case one is down
     const SDK_CDN_URLS = [
       "https://cdn.zama.ai/relayer-sdk-js/0.2.0/relayer-sdk-js.umd.cjs",
       "https://unpkg.com/@zama/fhevm@latest/dist/fhevm.umd.js",
       "https://cdn.jsdelivr.net/npm/@zama/fhevm@latest/dist/fhevm.umd.js"
     ];
-    
-    const SDK_CDN_URL = SDK_CDN_URLS[0]; // Start with the first one
-    
-    const existingScript = document.querySelector(`script[src="${SDK_CDN_URL}"]`);
-    if (existingScript) {
-      if ((window as any).relayerSDK) {
-        resolve();
-        return;
-      }
-      reject(new Error("Script loaded but relayerSDK not available"));
+
+    if ((window as any).relayerSDK) {
+      resolve();
       return;
     }
 
-    const script = document.createElement("script");
-    script.src = SDK_CDN_URL;
-    script.type = "text/javascript";
-    script.async = true;
-
-    script.onload = () => {
-      if (!(window as any).relayerSDK) {
-        reject(new Error(`Relayer SDK script loaded from ${SDK_CDN_URL}, but relayerSDK object is invalid`));
+    const tryLoad = (index: number) => {
+      if (index >= SDK_CDN_URLS.length) {
+        reject(new Error('Failed to load Relayer SDK from all CDN mirrors'));
         return;
       }
-      resolve();
+
+      const url = SDK_CDN_URLS[index];
+
+      // Avoid re-injecting the same script if it already exists
+      const existingScript = document.querySelector(`script[data-relayer-sdk][data-src-index="${index}"]`);
+      if (existingScript) {
+        if ((window as any).relayerSDK) {
+          resolve();
+          return;
+        }
+        existingScript.parentElement?.removeChild(existingScript);
+      }
+
+      const script = document.createElement("script");
+      script.src = url;
+      script.type = "text/javascript";
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      script.dataset.relayerSdk = "true";
+      script.dataset.srcIndex = String(index);
+
+      script.onload = () => {
+        if (!(window as any).relayerSDK) {
+          console.warn(`Relayer SDK script loaded from ${url}, but relayerSDK object not detected. Trying next mirror...`);
+          tryLoad(index + 1);
+          return;
+        }
+        resolve();
+      };
+
+      script.onerror = () => {
+        console.warn(`Failed to load Relayer SDK from ${url}. Trying next mirror...`);
+        tryLoad(index + 1);
+      };
+
+      console.log(`Loading Zama Relayer SDK from CDN (${index + 1}/${SDK_CDN_URLS.length})...`);
+      document.head.appendChild(script);
     };
 
-    script.onerror = () => {
-      reject(new Error(`Failed to load Relayer SDK from ${SDK_CDN_URL}`));
-    };
-
-    console.log('Loading Zama Relayer SDK from CDN...');
-    document.head.appendChild(script);
+    tryLoad(0);
   });
 };
 
