@@ -2,6 +2,9 @@
 
 import { ethers } from "ethers";
 
+// Security hardening: never persist decryption private keys/signatures to localStorage in this build.
+const PERSIST_SENSITIVE = false;
+
 export interface EIP712Type {
   domain: {
     name: string;
@@ -242,6 +245,10 @@ export class FhevmDecryptionSignature {
   }
 
   async saveToLocalStorage(instance: FhevmInstance, withPublicKey: boolean = false) {
+    if (!PERSIST_SENSITIVE) {
+      // Intentionally skip persisting sensitive material unless explicitly enabled.
+      return;
+    }
     try {
       const value = JSON.stringify(this);
 
@@ -269,6 +276,10 @@ export class FhevmDecryptionSignature {
     userAddress: string,
     publicKey?: string
   ): Promise<FhevmDecryptionSignature | null> {
+    if (!PERSIST_SENSITIVE) {
+      // Persistence disabled -> always force fresh signature per session.
+      return null;
+    }
     try {
       const storageKey = new FhevmDecryptionSignatureStorageKey(
         instance,
