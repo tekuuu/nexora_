@@ -293,9 +293,8 @@ export function useSuppliedBalances(
 
         const tokenValue = Number(decrypted) / Math.pow(10, token.decimals);
         // Use 8 decimal places to match useConfidentialTokenBalance precision
-        const formattedBalance = `${tokenValue.toFixed(8)} ${tokenSymbol}`;
-        
-        console.log(`✅ Supplied balance decrypted successfully for ${tokenSymbol}: ${formattedBalance}`);
+  const formattedBalance = `${tokenValue.toFixed(8)} ${tokenSymbol}`;
+  // Do not log decrypted values to console; only update UI state silently
 
       setBalances(prev => ({
         ...prev,

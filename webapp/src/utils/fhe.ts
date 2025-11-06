@@ -39,7 +39,7 @@ let isInitializing = false;
 // Public key storage for caching
 const publicKeyStorage = new Map<string, { publicKey: string; publicParams: any }>();
 
-// Load Zama Relayer SDK from CDN (like the official example)
+// Load Zama Relayer SDK from CDN
 const loadRelayerSDK = async (): Promise<void> => {
   return new Promise((resolve, reject) => {
     const SDK_CDN_URLS = [

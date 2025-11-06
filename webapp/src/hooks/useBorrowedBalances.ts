@@ -287,8 +287,7 @@ export function useBorrowedBalances(
 
           const tokenValue = Number(decrypted) / Math.pow(10, token.decimals);
           const formatted = `${tokenValue.toFixed(8)} ${tokenSymbol}`;
-
-          console.log(`✅ Borrowed balance decrypted for ${tokenSymbol}: ${formatted}`);
+          // Do not log decrypted values to console; only update UI state silently
 
           setBalances((prev) => ({
             ...prev,

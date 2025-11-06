@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount, useReadContract, useWalletClient } from 'wagmi';
@@ -311,8 +312,8 @@ export const useConfidentialTokenBalance = (
         const suffix = tokenInfo.symbol && tokenInfo.symbol.startsWith('c')
           ? tokenInfo.symbol
           : `c${tokenInfo.symbol}`;
-        const formattedBalance = `${tokenValue.toFixed(8)} ${suffix}`;
-        console.log(`✅ Confidential token balance decrypted successfully: ${formattedBalance}`);
+  const formattedBalance = `${tokenValue.toFixed(8)} ${suffix}`;
+  // Do not log decrypted confidential balances to console; update UI only
         setConfidentialBalance(formattedBalance);
         setHasConfidentialToken(tokenValue > 0);
         setIsDecrypted(true);

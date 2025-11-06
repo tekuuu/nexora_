@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt, useWalletClient } from 'wagmi';
@@ -190,13 +191,7 @@ export default function SupplyForm({
     color: '#627EEA',
   };
 
-  console.log('🔍 SupplyForm - Selected Asset:', selectedAsset);
-  console.log('🔍 SupplyForm - Using Asset:', asset);
-  console.log('🔍 SupplyForm - Asset Decimals Source:', {
-    symbol: asset.symbol,
-    decimals: asset.decimals,
-    source: selectedAsset ? 'DynamicAssetSelector via TOKEN_METADATA' : 'Hardcoded fallback'
-  });
+  // Debug logs removed or minimized to avoid leaking sensitive info
 
   // Use passed balance data from Dashboard (simplified)
   let assetBalance, hasAsset, isDecrypted;
@@ -220,12 +215,7 @@ export default function SupplyForm({
     isDecrypted = false;
   }
 
-  console.log('🔍 SupplyForm - Final Balance Display:', {
-    assetBalance,
-    hasAsset,
-    isDecrypted,
-    assetSymbol: asset.symbol
-  });
+  // Avoid logging decrypted balances
 
   const [amount, setAmount] = useState('');
   const [isValidAmount, setIsValidAmount] = useState(false);
@@ -240,8 +230,9 @@ export default function SupplyForm({
   const [isInTransactionFlow, setIsInTransactionFlow] = useState(false);
 
   // Balance validation with decryption and gas fees
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    console.log('🔍 SupplyForm validation:', { amount, hasAsset, assetBalance, isDecrypted });
+  // Avoid logging decrypted balances during validation
     
     // Clear previous error
     setBalanceError(null);
@@ -264,13 +255,7 @@ export default function SupplyForm({
           setBalanceError(`Insufficient balance! You have ${balanceTokens.toFixed(4)} ${asset.symbol} available, but need ${totalCost.toFixed(6)} ${asset.symbol}.`);
         }
         
-        console.log('🔍 Decrypted balance validation:', { 
-          amountTokens, 
-          balanceTokens, 
-          protocolFee, 
-          totalCost, 
-          isValid 
-        });
+        // Avoid logging decrypted numeric values
       } else {
         const isValid = amountTokens > 0;
         setIsValidAmount(isValid);
@@ -281,7 +266,7 @@ export default function SupplyForm({
       if (amount && !hasAsset) {
         setBalanceError(`❌ No ${asset.symbol} balance available`);
       }
-      console.log('🔍 Validation failed:', { hasAmount: !!amount, hasAsset });
+  // Minimal non-sensitive validation logging only if needed
     }
   }, [amount, assetBalance, hasAsset, isDecrypted, asset.symbol]);
 
@@ -439,9 +424,9 @@ export default function SupplyForm({
   const handleMaxAmount = () => {
     // If balance is decrypted, use the actual amount
     if (isDecrypted && hasAsset) {
-      const balanceTokens = parseFloat(assetBalance.replace(` ${asset.symbol}`, ''));
-      setAmount(balanceTokens.toString());
-      console.log('🔍 MAX button: Set amount to decrypted balance:', balanceTokens);
+  const balanceTokens = parseFloat(assetBalance.replace(` ${asset.symbol}`, ''));
+  setAmount(balanceTokens.toString());
+  // Do not log decrypted balance values
     } else if (hasAsset) {
       // If balance is encrypted but we have the asset, set a reasonable amount
       // Since we can't see the exact balance, set a moderate amount
