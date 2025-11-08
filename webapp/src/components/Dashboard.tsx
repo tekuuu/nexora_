@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import Image from 'next/image';
 import { useAccount, useBalance, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useReadContract, useReadContracts, useConfig } from 'wagmi';
 import { useQueryClient } from '@tanstack/react-query';
 import isEqual from 'fast-deep-equal';
@@ -30,6 +31,8 @@ import {
   ListItemText,
   IconButton,
   Alert,
+  Collapse,
+  alpha,
 } from '@mui/material';
 import { AccountBalanceWallet, ContentCopy, ExpandMore, Close, SwapHoriz, Lock, LockOpen, Cached, AccountBalance, Percent } from '@mui/icons-material';
 import { Tooltip } from '@mui/material';
@@ -250,6 +253,8 @@ export default function Dashboard(): JSX.Element {
   const router = useRouter();
   
   useEffect(() => {
+    // Snapshot current timeout ref for cleanup to satisfy exhaustives deps
+    const timeoutSnapshot = timeoutRef.current;
     setIsMounted(true);
   }, []);
 
@@ -527,19 +532,19 @@ export default function Dashboard(): JSX.Element {
   const poolAddr = CONTRACTS.LENDING_POOL as `0x${string}`;
 
 
-  // ABI for POOL
-  const POOL_ABI = [
+  // ABI for POOL (memoized for stable reference in hooks)
+  const POOL_ABI = useMemo(() => ([
     {
-      "inputs": [
-        { "internalType": "address", "name": "", "type": "address" },
-        { "internalType": "address", "name": "", "type": "address" }
+      inputs: [
+        { internalType: 'address', name: '', type: 'address' },
+        { internalType: 'address', name: '', type: 'address' }
       ],
-      "name": "userCollateralEnabled",
-      "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-      "stateMutability": "view",
-      "type": "function"
+      name: 'userCollateralEnabled',
+      outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+      stateMutability: 'view',
+      type: 'function'
     }
-  ] as const;
+  ] as const), []);
 
   // Dynamic reserves - fetches all active reserves from on-chain
   const { supplyAssets, borrowAssets, collateralAssets, isLoading: isLoadingReserves } = useAvailableReserves();
@@ -683,7 +688,7 @@ export default function Dashboard(): JSX.Element {
       }
       mounted = false;
     };
-  }, [address, supplyAssets, config, collateralRefreshTrigger]);
+  }, [address, supplyAssets, config, collateralRefreshTrigger, poolAddr, queryClient, POOL_ABI]);
   
   // Prepare available assets for WalletAssetBreakdown component
   const availableWalletAssets = useMemo(() => {
@@ -740,7 +745,14 @@ export default function Dashboard(): JSX.Element {
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   
   const [portfolioSubTab, setPortfolioSubTab] = useState('overview'); // 'overview' or 'history'
-  const [showNotificationBanner, setShowNotificationBanner] = useState(true);
+  const [showNotificationBanner, setShowNotificationBanner] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return localStorage.getItem('nexora.banner.dismissed.v1') !== '1';
+    } catch {
+      return true;
+    }
+  });
   const [swapAmount, setSwapAmount] = useState('');
   const [isSwapping, setIsSwapping] = useState(false);
   const [selectedToken, setSelectedToken] = useState('WETH');
@@ -927,7 +939,7 @@ export default function Dashboard(): JSX.Element {
         setSwapSuccess(false);
       }, 5000);
     }
-  }, [isSwapSuccess, swapHash, resetSwapWrite, selectedToken]);
+  }, [isSwapSuccess, swapHash, resetSwapWrite, selectedToken, swapAmount]);
 
   // Handle swap transaction errors
   useEffect(() => {
@@ -1648,46 +1660,55 @@ export default function Dashboard(): JSX.Element {
   return (
     <>
       {/* Notification Banner */}
-      {showNotificationBanner && (
-        <Box sx={{ 
-          background: isDarkMode 
-            ? 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)'
-            : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-          color: 'white',
-          py: 1,
-          textAlign: 'center',
-          borderBottom: isDarkMode 
-            ? '1px solid rgba(255, 255, 255, 0.1)'
-            : '1px solid rgba(255, 255, 255, 0.2)',
-          position: 'relative'
-        }}>
-          <Typography variant="h6" sx={{ 
-                        fontWeight: '600',
-            fontSize: '1rem',
-            letterSpacing: '0.5px'
-          }}>
-            Nexora - The Next Confidential Lending Protocol
-          </Typography>
+      <Collapse in={showNotificationBanner} timeout={240} unmountOnExit>
+        <Box
+          sx={(t) => ({
+            position: 'relative',
+            py: 1.25,
+            px: 2,
+            borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+            // Light mode should match AppBar background
+            background: isDarkMode
+              ? `linear-gradient(180deg, ${alpha(t.palette.primary.main, 0.10)} 0%, ${alpha(t.palette.primary.main, 0.06)} 100%)`
+              : 'linear-gradient(135deg, #ffffff3a 0%, #e6ded4de 0%)',
+          })}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography sx={{
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              letterSpacing: '0.25px',
+              color: isDarkMode ? 'rgba(255,255,255,0.9)' : '#0b0e13',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '100%'
+            }}>
+              Nexora confidential lending protocol built on Zama FHEVM
+            </Typography>
+          </Box>
           <IconButton
-            onClick={() => setShowNotificationBanner(false)}
+            onClick={() => {
+              setShowNotificationBanner(false);
+              try { localStorage.setItem('nexora.banner.dismissed.v1', '1'); } catch {}
+            }}
             sx={{
               position: 'absolute',
               right: 8,
               top: '50%',
               transform: 'translateY(-50%)',
-              color: 'white',
+              color: isDarkMode ? 'rgba(255,255,255,0.8)' : '#38424b',
               '&:hover': {
-                backgroundColor: isDarkMode 
-                  ? 'rgba(255, 255, 255, 0.1)'
-                  : 'rgba(255, 255, 255, 0.2)'
+                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(11,14,19,0.06)'
               }
             }}
             size="small"
+            aria-label="Dismiss announcement"
           >
-            <Close />
+            <Close fontSize="small" />
           </IconButton>
         </Box>
-      )}
+      </Collapse>
 
       <AppBar position="static" sx={{ 
         background: isDarkMode 
@@ -1931,13 +1952,11 @@ export default function Dashboard(): JSX.Element {
                       alignItems: 'center',
                       marginRight: { xs: '0px', sm: '8px' }
                     }}>
-                      <img 
-                        src={availableNetworks.find(n => n.name === selectedNetwork)?.icon} 
-                        alt={selectedNetwork}
-                        style={{ 
-                          width: '16px', 
-                          height: '16px'
-                        }}
+                      <Image 
+                        src={availableNetworks.find(n => n.name === selectedNetwork)?.icon || ''} 
+                        alt={selectedNetwork || 'network'}
+                        width={16}
+                        height={16}
                       />
                     </Box>
                     <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>
@@ -2012,10 +2031,11 @@ export default function Dashboard(): JSX.Element {
                               : 'rgba(0, 0, 0, 0.05)'
                           }}
                         >
-                          <img 
+                          <Image 
                             src={network.icon} 
                             alt={network.name}
-                            style={{ width: '14px', height: '14px' }}
+                            width={14}
+                            height={14}
                           />
                           <Box sx={{ flex: 1 }}>
                             <Typography variant="body2" sx={{ 
@@ -2306,7 +2326,7 @@ export default function Dashboard(): JSX.Element {
 
                 {/* Supplies Section */}
                 <Box sx={{ mb: 4 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: isDarkMode ? 'white' : '#000000' }}>Your Supplies</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: isDarkMode ? 'white' : '#000000' }}>Supplies</Typography>
                   <UserSuppliesSection
                     suppliedBalances={suppliedBalancesMap}
                     assets={supplyAssets}
@@ -2320,7 +2340,7 @@ export default function Dashboard(): JSX.Element {
 
                 {/* Borrows Section */}
                 <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: isDarkMode ? 'white' : '#000000' }}>Your Borrows</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: isDarkMode ? 'white' : '#000000' }}>Borrows</Typography>
                   <UserBorrowsSection
                     borrowedBalances={borrowedBalances}
                     suppliedBalances={suppliedBalancesMap}
@@ -2645,10 +2665,11 @@ export default function Dashboard(): JSX.Element {
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    <img 
+                    <Image 
                       src="/assets/icons/telegram.svg" 
                       alt="Telegram"
-                      style={{ width: '16px', height: '16px' }}
+                      width={16}
+                      height={16}
                     />
                   </IconButton>
                   <IconButton
@@ -2661,10 +2682,11 @@ export default function Dashboard(): JSX.Element {
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    <img 
+                    <Image 
                       src="/assets/icons/discord.svg" 
                       alt="Discord"
-                      style={{ width: '16px', height: '16px' }}
+                      width={16}
+                      height={16}
                     />
                   </IconButton>
                   <IconButton
@@ -2677,10 +2699,11 @@ export default function Dashboard(): JSX.Element {
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    <img 
+                    <Image 
                       src="/assets/icons/refinedgithub.svg" 
                       alt="GitHub"
-                      style={{ width: '16px', height: '16px' }}
+                      width={16}
+                      height={16}
                     />
                   </IconButton>
                   <IconButton
@@ -2693,10 +2716,11 @@ export default function Dashboard(): JSX.Element {
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    <img 
+                    <Image 
                       src="/assets/icons/x.svg" 
                       alt="X (Twitter)"
-                      style={{ width: '16px', height: '16px' }}
+                      width={16}
+                      height={16}
                     />
                   </IconButton>
                 </Box>
@@ -2951,12 +2975,14 @@ export default function Dashboard(): JSX.Element {
                       <div className={styles.inputSuffix}>
                         <button type="button" className={styles.maxButtonChip} onClick={handleMaxAmount}>MAX</button>
                         <button type="button" className={styles.tokenSelectorBtn} onClick={() => setTokenDropdownOpen(!tokenDropdownOpen)}>
-                          <img
+                          <Image
                             src={isReversed ? (selectedToken === 'WETH' ? '/assets/icons/cweth.svg' : 
                                               selectedToken === 'USDC' ? '/assets/icons/cusdc.svg' : 
                                               '/assets/icons/multi-collateral-dai-dai-logo.svg') : 
                                  (availableTokens.find(t => t.symbol === selectedToken)?.icon || '/assets/icons/eth-svgrepo-com.svg')}
                             alt={isReversed ? `Confidential ${selectedToken}` : (availableTokens.find(t => t.symbol === selectedToken)?.name || 'Ethereum')}
+                            width={20}
+                            height={20}
                           />
                           <span className={styles.suffixSymbol}>{isReversed ? `c${selectedToken}` : selectedToken}</span>
                           <span className={styles.caret}>▾</span>
@@ -2978,9 +3004,11 @@ export default function Dashboard(): JSX.Element {
                             disabled={!token.functional}
                           >
                             <span className={styles.dropdownLeft}>
-                              <img 
+                              <Image 
                                 src={token.icon} 
                                 alt={token.name}
+                                width={20}
+                                height={20}
                               />
                               <span className={styles.dropdownName}>{isReversed ? `Confidential ${token.name}` : token.name}</span>
                               <span className={styles.dropdownTicker}>{isReversed ? `c${token.symbol}` : token.symbol}</span>
@@ -3168,12 +3196,14 @@ export default function Dashboard(): JSX.Element {
                       />
                       <div className={styles.inputSuffix}>
                         <div className={styles.tokenSelectorBtn}>
-                          <img 
+                          <Image 
                             src={isReversed ? (availableTokens.find(t => t.symbol === selectedToken)?.icon || '/assets/icons/eth-svgrepo-com.svg') : 
                                  (selectedToken === 'WETH' ? '/assets/icons/cweth.svg' : 
                                   selectedToken === 'USDC' ? '/assets/icons/cusdc.svg' : 
                                   '/assets/icons/multi-collateral-dai-dai-logo.svg')} 
                             alt={isReversed ? (availableTokens.find(t => t.symbol === selectedToken)?.name || 'Ethereum') : `Confidential ${selectedToken}`}
+                            width={20}
+                            height={20}
                           />
                           <span className={styles.suffixSymbol}>{isReversed ? selectedToken : `c${selectedToken}`}</span>
                         </div>

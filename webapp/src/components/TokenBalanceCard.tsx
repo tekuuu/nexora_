@@ -1,6 +1,8 @@
 'use client';
 
 import { Box, Typography, IconButton, Tooltip, CircularProgress } from '@mui/material';
+import Image from 'next/image';
+import { useState } from 'react';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { useConfidentialTokenBalance } from '../hooks/useConfidentialTokenBalance';
@@ -27,6 +29,7 @@ export default function TokenBalanceCard({
   isDarkMode
 }: TokenBalanceCardProps) {
   const theme = useTheme();
+  const [iconSrc, setIconSrc] = useState(asset.icon);
 
   // Each card has its own balance hook - on-demand decryption!
   const {
@@ -46,13 +49,12 @@ export default function TokenBalanceCard({
       {/* Asset column */}
       <td>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <img
-            src={asset.icon}
+          <Image
+            src={iconSrc}
             alt={asset.symbol}
-            style={{ width: '32px', height: '32px' }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = '/assets/icons/default-token.svg';
-            }}
+            width={32}
+            height={32}
+            onError={() => setIconSrc('/assets/icons/default-token.svg')}
           />
           <Box>
             <Typography variant="body2" sx={{

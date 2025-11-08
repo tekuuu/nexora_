@@ -10,17 +10,20 @@ import Box from '@mui/material/Box';
  *  - Central core node
  *  - Orbiting smaller nodes following slightly noisy circular paths
  *  - Subtle connecting arcs and pulsing opacity
- *  - Low CPU: capped objects & requestAnimationFrame loop
  */
 export default function ProtocolViz() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const theme = useTheme();
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  const c = canvasRef.current;
+  if (!c) return;
+  // Capture a non-null canvas reference for inner closures
+  const canvas = c as HTMLCanvasElement;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  // Assert non-null for inner closures
+  const context = ctx as CanvasRenderingContext2D;
 
     let animationFrame: number;
     const dpr = window.devicePixelRatio || 1;
@@ -64,7 +67,7 @@ export default function ProtocolViz() {
 
     function drawCore(cx: number, cy: number) {
       if (!coreGradientCache.g || coreGradientCache.w !== canvas.width || coreGradientCache.h !== canvas.height) {
-        const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, 140);
+        const g = context.createRadialGradient(cx, cy, 4, cx, cy, 140);
         g.addColorStop(0, alpha(coreColor, 0.55));
         g.addColorStop(0.35, alpha(coreColor, 0.18));
         g.addColorStop(1, 'transparent');
@@ -72,23 +75,23 @@ export default function ProtocolViz() {
         coreGradientCache.w = canvas.width;
         coreGradientCache.h = canvas.height;
       }
-      ctx.beginPath();
-      ctx.fillStyle = coreGradientCache.g!;
-      ctx.arc(cx, cy, 140, 0, Math.PI * 2);
-      ctx.fill();
+      context.beginPath();
+      context.fillStyle = coreGradientCache.g!;
+      context.arc(cx, cy, 140, 0, Math.PI * 2);
+      context.fill();
 
-      ctx.beginPath();
-      ctx.fillStyle = coreColor;
-      ctx.shadowColor = coreColor;
-      ctx.shadowBlur = 16;
-      ctx.arc(cx, cy, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      context.beginPath();
+      context.fillStyle = coreColor;
+      context.shadowColor = coreColor;
+      context.shadowBlur = 16;
+      context.arc(cx, cy, 10, 0, Math.PI * 2);
+      context.fill();
+      context.shadowBlur = 0;
     }
 
     function render(ts: number) {
       const { width, height } = canvas.getBoundingClientRect();
-      ctx.clearRect(0, 0, width, height);
+  context.clearRect(0, 0, width, height);
       const cx = width / 2;
       const cy = height / 2;
 
@@ -96,13 +99,13 @@ export default function ProtocolViz() {
       drawCore(cx, cy);
 
       // Semi-random subtle background ring
-      ctx.beginPath();
-      ctx.strokeStyle = alpha(primary, 0.12);
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 6]);
-      ctx.arc(cx, cy, 100, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
+  context.beginPath();
+  context.strokeStyle = alpha(primary, 0.12);
+  context.lineWidth = 1;
+  context.setLineDash([4, 6]);
+  context.arc(cx, cy, 100, 0, Math.PI * 2);
+  context.stroke();
+  context.setLineDash([]);
 
       // Update & draw nodes
       nodes.forEach((n, idx) => {
@@ -115,40 +118,40 @@ export default function ProtocolViz() {
 
         // Connection line to core (fade based on distance)
         const lineAlpha = Math.min(1, Math.max(0, 1 - dist / 220));
-        ctx.beginPath();
-        ctx.strokeStyle = alpha(lineColor, lineAlpha);
-        ctx.lineWidth = 1;
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+  context.beginPath();
+  context.strokeStyle = alpha(lineColor, lineAlpha);
+  context.lineWidth = 1;
+  context.moveTo(cx, cy);
+  context.lineTo(x, y);
+  context.stroke();
 
         // Occasional arc between neighbors
         if (idx % 3 === 0) {
             const next = nodes[(idx + 3) % nodes.length];
             const nx = cx + Math.cos(next.angle) * (next.dist + Math.sin((ts + next.offset) * 0.0005) * 8);
             const ny = cy + Math.sin(next.angle) * (next.dist + Math.sin((ts + next.offset) * 0.0005) * 8) * 0.88;
-            ctx.beginPath();
-            ctx.strokeStyle = alpha(primary, 0.07);
-            ctx.moveTo(x, y);
-            ctx.lineTo(nx, ny);
-            ctx.stroke();
+      context.beginPath();
+      context.strokeStyle = alpha(primary, 0.07);
+      context.moveTo(x, y);
+      context.lineTo(nx, ny);
+      context.stroke();
         }
 
         // Node
         const pulseScale = 0.55 + Math.sin(n.pulse) * 0.45;
-        ctx.beginPath();
-        ctx.fillStyle = alpha(primary, 0.25 + 0.5 * pulseScale);
-        ctx.shadowColor = bgGlow;
-        ctx.shadowBlur = 6 * pulseScale;
-        ctx.arc(x, y, n.radius * (0.7 + 0.6 * pulseScale), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+  context.beginPath();
+  context.fillStyle = alpha(primary, 0.25 + 0.5 * pulseScale);
+  context.shadowColor = bgGlow;
+  context.shadowBlur = 6 * pulseScale;
+  context.arc(x, y, n.radius * (0.7 + 0.6 * pulseScale), 0, Math.PI * 2);
+  context.fill();
+  context.shadowBlur = 0;
 
         // Inner solid core of node
-        ctx.beginPath();
-        ctx.fillStyle = alpha(primary, 0.9);
-        ctx.arc(x, y, Math.max(1, n.radius * 0.45), 0, Math.PI * 2);
-        ctx.fill();
+        context.beginPath();
+        context.fillStyle = alpha(primary, 0.9);
+        context.arc(x, y, Math.max(1, n.radius * 0.45), 0, Math.PI * 2);
+        context.fill();
       });
 
       animationFrame = requestAnimationFrame(render);
