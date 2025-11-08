@@ -15,20 +15,10 @@ import {
   Stack,
   alpha,
 } from '@mui/material';
-import {
-  Lock,
-  TrendingUp,
-  Security,
-  Speed,
-  AccountBalanceWallet,
-  Menu as MenuIcon,
-  Close,
-  GitHub,
-  Twitter,
-  Telegram,
-} from '@mui/icons-material';
+import { Menu as MenuIcon, Close, GitHub, Twitter, Telegram } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import ProtocolViz from './ProtocolViz';
 
 export default function LandingPage() {
   const theme = useTheme();
@@ -140,7 +130,16 @@ export default function LandingPage() {
             </Stack>
           </Grid>
 
-          {/* Right column (Get started / Open Dashboard) removed to avoid duplicate CTAs. */}
+          <Grid item xs={12} md={5}>
+            <Box sx={{
+              p: 2,
+              borderRadius: 2,
+              border: '1px solid rgba(255,255,255,0.04)',
+              backgroundColor: 'rgba(255,255,255,0.02)'
+            }}>
+              <ProtocolViz />
+            </Box>
+          </Grid>
         </Grid>
 
         {/* Feature cards removed per request (inaccurate): Private Yield, Composable, Performance */}
