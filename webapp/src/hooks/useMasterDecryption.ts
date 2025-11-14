@@ -228,6 +228,32 @@ export const useMasterDecryption = () => {
         // Retry loop for signing (handles wallet/SDK warm-up)
         let attempt = 0;
         let lastErr: any = null;
+        let cancellationDetected = false;
+
+        const isUserCancellation = (err: any): boolean => {
+          if (!err) return false;
+          const msg = (err.message || String(err)).toString().toLowerCase();
+          // EIP-1193 standard user rejected code
+          if (err.code === 4001 || err.code === 'ACTION_REJECTED' || err.code === 'USER_REJECTED') return true;
+          // Common wallet messages
+          const cancelPhrases = [
+            'user rejected',
+            'user denied',
+            'user rejected the request',
+            'user rejected signing',
+            'user cancelled',
+            'user canceled',
+            'action rejected',
+            'request was rejected',
+            'denied message',
+            'user rejected transaction',
+            'signature request rejected',
+            'signature request was rejected',
+            'request rejected'
+          ];
+          return cancelPhrases.some((p) => msg.includes(p));
+        };
+
         while (attempt < 3 && !sig) {
           attempt += 1;
           try {
@@ -239,6 +265,13 @@ export const useMasterDecryption = () => {
             if (!sig) throw new Error('Signature creation returned null');
           } catch (e: any) {
             lastErr = e;
+            if (isUserCancellation(e)) {
+              cancellationDetected = true;
+              // Only show a short, user-friendly cancellation message to avoid
+              // printing provider internals (which can be noisy and leak details).
+              console.warn('the user canceled the wallet sign');
+              break; // stop retrying on explicit user cancellation
+            }
             console.warn(`⚠️ Master signature attempt ${attempt} failed:`, e?.message ?? e);
             // Small backoff before retry
             await new Promise((r) => setTimeout(r, 800 * attempt));
@@ -246,6 +279,11 @@ export const useMasterDecryption = () => {
         }
 
         if (!sig) {
+          if (cancellationDetected) {
+            // Use a concise message that will be surfaced to UI state and
+            // avoid bubbling provider internals into logs.
+            throw new Error('the user canceled the wallet sign');
+          }
           const reason = (lastErr && (lastErr.message || String(lastErr))) || 'unknown';
           throw new Error(`Failed to create master decryption signature: ${reason}`);
         }
@@ -288,9 +326,17 @@ export const useMasterDecryption = () => {
       console.log('✅ Master decryption successful - all balances unlocked');
       
     } catch (error) {
-      console.error('❌ Master decryption failed:', error);
-      setDecryptionError(error instanceof Error ? error.message : 'Decryption failed');
-      setIsAllDecrypted(false);
+      // If the user cancelled the signature, avoid logging the full error
+      // object (provider internals). Show a simple message instead.
+      if (error instanceof Error && error.message === 'the user canceled the wallet sign') {
+        console.warn('the user canceled the wallet sign');
+        setDecryptionError(error.message);
+        setIsAllDecrypted(false);
+      } else {
+        console.error('❌ Master decryption failed:', error);
+        setDecryptionError(error instanceof Error ? error.message : 'Decryption failed');
+        setIsAllDecrypted(false);
+      }
     } finally {
       setIsDecrypting(false);
       isUnlockingRef.current = false;

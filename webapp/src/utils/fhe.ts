@@ -34,71 +34,69 @@ export interface FhevmInstance {
 }
 
 let fheInstance: FhevmInstance | null = null;
-let isInitializing = false;
+// Use a single initialization promise to avoid races when multiple callers request the instance
+let initPromise: Promise<FhevmInstance | null> | null = null;
 
 // Public key storage for caching
 const publicKeyStorage = new Map<string, { publicKey: string; publicParams: any }>();
 
-// Load Zama Relayer SDK from CDN
-const loadRelayerSDK = async (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const SDK_CDN_URLS = [
-      "https://cdn.zama.ai/relayer-sdk-js/0.2.0/relayer-sdk-js.umd.cjs",
-      "https://unpkg.com/@zama/fhevm@latest/dist/fhevm.umd.js",
-      "https://cdn.jsdelivr.net/npm/@zama/fhevm@latest/dist/fhevm.umd.js"
-    ];
+// Load Zama Relayer SDK from CDN with a timeout and single primary URL
+const SDK_URL = "https://cdn.zama.org/relayer-sdk-js/0.2.0/relayer-sdk-js.umd.cjs";
+const SDK_LOAD_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_FHE_SDK_LOAD_TIMEOUT_MS) || 30000;
+const INSTANCE_INIT_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_FHE_INSTANCE_INIT_TIMEOUT_MS) || 60000;
+const ENABLE_FHE_DEBUG = process.env.NEXT_PUBLIC_FHE_DEBUG === 'true';
 
-    if ((window as any).relayerSDK) {
-      resolve();
-      return;
+const dbg = (...args: any[]) => {
+  if (ENABLE_FHE_DEBUG) console.log('[fhe]', ...args);
+};
+
+const withTimeout = <T>(p: Promise<T>, ms: number, msg?: string) => {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(msg || `Operation timed out after ${ms}ms`)), ms);
+    p.then((v) => {
+      clearTimeout(timer);
+      resolve(v);
+    }).catch((err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+};
+
+// Load SDK (single URL). This intentionally avoids fallback mirrors to keep behavior deterministic.
+const loadRelayerSDK = async (): Promise<void> => {
+  if ((window as any).relayerSDK) return;
+
+  return withTimeout(new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector(`script[data-relayer-sdk]`);
+    if (existing) {
+      // If a script tag exists but relayerSDK not ready yet, wait for load/onerror events
+      if ((window as any).relayerSDK) return resolve();
+      // remove stale, we'll inject a fresh one
+      existing.parentElement?.removeChild(existing);
     }
 
-    const tryLoad = (index: number) => {
-      if (index >= SDK_CDN_URLS.length) {
-        reject(new Error('Failed to load Relayer SDK from all CDN mirrors'));
-        return;
+    const script = document.createElement('script');
+    script.src = SDK_URL;
+    script.type = 'text/javascript';
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.dataset.relayerSdk = 'true';
+
+    script.onload = () => {
+      // The SDK should attach `relayerSDK` to window; ensure it did
+      if (!(window as any).relayerSDK) {
+        return reject(new Error('Relayer SDK loaded but global `relayerSDK` not present'));
       }
-
-      const url = SDK_CDN_URLS[index];
-
-      // Avoid re-injecting the same script if it already exists
-      const existingScript = document.querySelector(`script[data-relayer-sdk][data-src-index="${index}"]`);
-      if (existingScript) {
-        if ((window as any).relayerSDK) {
-          resolve();
-          return;
-        }
-        existingScript.parentElement?.removeChild(existingScript);
-      }
-
-      const script = document.createElement("script");
-      script.src = url;
-      script.type = "text/javascript";
-      script.async = true;
-      script.crossOrigin = "anonymous";
-      script.dataset.relayerSdk = "true";
-      script.dataset.srcIndex = String(index);
-
-      script.onload = () => {
-        if (!(window as any).relayerSDK) {
-          console.warn(`Relayer SDK script loaded from ${url}, but relayerSDK object not detected. Trying next mirror...`);
-          tryLoad(index + 1);
-          return;
-        }
-        resolve();
-      };
-
-      script.onerror = () => {
-        console.warn(`Failed to load Relayer SDK from ${url}. Trying next mirror...`);
-        tryLoad(index + 1);
-      };
-
-      console.log(`Loading Zama Relayer SDK from CDN (${index + 1}/${SDK_CDN_URLS.length})...`);
-      document.head.appendChild(script);
+      resolve();
+    };
+    script.onerror = (ev) => {
+      reject(new Error(`Failed to load Relayer SDK from ${SDK_URL}`));
     };
 
-    tryLoad(0);
-  });
+    dbg('Loading Zama Relayer SDK from CDN:', SDK_URL);
+    document.head.appendChild(script);
+  }), SDK_LOAD_TIMEOUT_MS, 'Loading Relayer SDK timed out');
 };
 
 export const getFHEInstance = async (provider?: any): Promise<FhevmInstance> => {
@@ -107,160 +105,87 @@ export const getFHEInstance = async (provider?: any): Promise<FhevmInstance> => 
     throw new Error('FHE operations can only be performed in the browser');
   }
 
-  if (!fheInstance && !isInitializing) {
-    isInitializing = true;
+  // If we already have a ready instance, return it immediately
+  if (fheInstance) return fheInstance;
+
+  // If initialization is already in progress, return the same promise
+  if (initPromise) {
+    const p = await initPromise;
+    if (p) return p;
+  }
+
+  // Otherwise, create a single init promise that other callers can await
+  initPromise = (async () => {
     try {
-    // Creating FHE instance using official Zama configuration
-    console.log('🔧 Creating FHE instance using official Zama configuration...');
-      
-      // Try to load the SDK from CDN first (like the official example)
+      dbg('Starting FHE instance initialization...');
+
       if (!(window as any).relayerSDK) {
-    // Loading SDK from CDN
-    console.log('📦 Loading Zama Relayer SDK from CDN...');
-        try {
-          await loadRelayerSDK();
-    // CDN script loaded successfully
-    console.log('✅ CDN script loaded successfully');
-        } catch (cdnError) {
-          console.error('❌ CDN loading failed:', cdnError);
-          throw new Error(`Failed to load Zama SDK from CDN: ${cdnError instanceof Error ? cdnError.message : String(cdnError)}. Please check your internet connection and try again.`);
-        }
+        dbg('Relayer SDK not present, loading from CDN...');
+        await loadRelayerSDK();
+        dbg('Relayer SDK loaded');
       }
-      
+
       const relayerSDK = (window as any).relayerSDK;
-      if (!relayerSDK) {
-        console.error('❌ relayerSDK is not available after loading');
-        throw new Error('Failed to load relayerSDK from CDN - SDK object is not available');
-      }
-      
-    // SDK loaded successfully
-    console.log('✅ relayerSDK loaded successfully');
-      
-    // Using Sepolia configuration
-      
-      // Initialize SDK if not already initialized
+      if (!relayerSDK) throw new Error('relayerSDK not available after loading');
+
+      // Initialize SDK if needed
       if (!relayerSDK.__initialized__) {
-    // Initializing SDK
-    console.log('⚙️ Initializing relayerSDK...');
-        await relayerSDK.initSDK();
+        dbg('Initializing relayerSDK...');
+        await withTimeout(relayerSDK.initSDK(), INSTANCE_INIT_TIMEOUT_MS, 'relayerSDK.initSDK timed out');
         relayerSDK.__initialized__ = true;
       }
-      
-      // Check if we have cached public key (like the official example)
-      const aclAddress = relayerSDK.SepoliaConfig.aclContractAddress;
-      let cachedKey = publicKeyStorage.get(aclAddress);
-    
-      
-    // Creating FHE instance
-    console.log('🔧 Creating FHE instance...');
-      
-      // Create config with or without public key (like the official example)
+
+      const aclAddress = relayerSDK.SepoliaConfig?.aclContractAddress;
+      const cachedKey = aclAddress ? publicKeyStorage.get(aclAddress) : undefined;
+
       const { getSepoliaRpcUrl } = await import('./rpc');
       const config = {
         ...relayerSDK.SepoliaConfig,
         network: provider || getSepoliaRpcUrl(),
-        ...(cachedKey && { 
-          publicKey: cachedKey.publicKey,
-          publicParams: cachedKey.publicParams 
-        }),
+        ...(cachedKey && { publicKey: cachedKey.publicKey, publicParams: cachedKey.publicParams }),
       };
-      
-      fheInstance = await relayerSDK.createInstance(config);
-    // FHE instance created successfully
-    console.log('✅ FHE instance created successfully');
-      
-      // Get public key from the instance and cache it (like the official example)
-      if (fheInstance) {
-        const publicKeyData = fheInstance.getPublicKey();
-        const publicParamsData = fheInstance.getPublicParams(2048);
-        
+
+      dbg('Creating relayerSDK instance with config', { aclAddress, cachedKey: !!cachedKey });
+
+      // Create instance with a timeout
+      fheInstance = await withTimeout(relayerSDK.createInstance(config), INSTANCE_INIT_TIMEOUT_MS, 'createInstance timed out');
+
+      // Cache public key/params when available
+      if (fheInstance && aclAddress) {
+        const publicKeyData = fheInstance.getPublicKey?.();
+        const publicParamsData = fheInstance.getPublicParams?.(2048 as any);
         if (publicKeyData && publicParamsData) {
-    // Caching public key for future use
-    console.log('💾 Caching public key and params for future use...');
+          dbg('Caching public key and params');
           publicKeyStorage.set(aclAddress, {
-            publicKey: publicKeyData.publicKeyId, // Use the ID as the key
-            publicParams: publicParamsData
+            publicKey: publicKeyData.publicKeyId,
+            publicParams: publicParamsData,
           });
         }
       }
-      
-    } catch (error) {
-      console.error('Failed to initialize FHE instance:', error);
-      console.error('Creating working mock instance for testing...');
-      
-      // Create a working mock FHE instance that can handle basic operations
-      fheInstance = {
-        getPublicKey: () => ({ publicKeyId: 'mock-key', publicKey: new Uint8Array(32) }),
-        getPublicParams: () => ({ publicParams: new Uint8Array(32), publicParamsId: 'mock-params' }),
-        createEIP712: (
-          publicKey: string,
-          contractAddresses: string[],
-          startTimestamp: number,
-          durationDays: number
-        ) => ({
-          domain: {
-            name: 'FHEVM',
-            version: '1',
-            chainId: 11155111,
-            verifyingContract: '0x0000000000000000000000000000000000000000'
-          },
-          types: {
-            UserDecryptRequestVerification: [
-              { name: 'publicKey', type: 'bytes' },
-              { name: 'contract', type: 'address' },
-              { name: 'startTime', type: 'uint64' },
-              { name: 'duration', type: 'uint64' }
-            ]
-          },
-          message: {
-            // Ethers requires BytesLike for bytes-typed fields
-            publicKey: (publicKey && publicKey.startsWith('0x')) ? publicKey : '0x' + (publicKey || '').toString().padEnd(64, '0'),
-            contract: (contractAddresses && contractAddresses[0]) || '0x0000000000000000000000000000000000000000',
-            startTime: startTimestamp || 0,
-            duration: durationDays || 0
-          }
-        }),
-        generateKeypair: () => ({
-          // Return valid hex strings for keys so EIP-712 signing doesn't fail
-          publicKey: '0x' + '11'.repeat(32), // 32-byte hex
-          privateKey: '0x' + '22'.repeat(32), // 32-byte hex
-        }),
-        createEncryptedInput: (contractAddress: string, userAddress: string) => ({
-          add64: (value: bigint) => {
-            console.log('Mock: Adding value', value.toString());
-          },
-          encrypt: async () => {
-            console.log('Mock: Encrypting input...');
-            // Return mock encrypted data in the correct format for FHEVM
-            // These are valid-looking encrypted handles that the contract should accept
-            return {
-              handles: ['0x' + 'a'.repeat(64)], // Mock handle (64 hex chars)
-              inputProof: '0x' + 'b'.repeat(128) // Mock proof (128 hex chars)
-            };
-          }
-        }),
-        publicDecrypt: async () => ({}),
-        userDecrypt: async () => ({})
-      } as any;
-      
-    // Working mock FHE instance created
-    console.log('✅ Working mock FHE instance created');
-    } finally {
-      isInitializing = false;
+
+      dbg('FHE instance ready');
+      return fheInstance;
+    } catch (err: any) {
+      // On failure, clear initPromise so callers can attempt again later
+      initPromise = null;
+      dbg('FHE initialization failed:', err?.message || err);
+
+        // Propagate error to callers so they can handle init failures explicitly.
+        // Do not create or return a mock instance in any environment — rely on callers to
+        // handle failures (show UI, retry, etc.).
+        throw err;
     }
-  }
-  
-  if (!fheInstance) {
-    throw new Error('FHE instance not available');
-  }
-  
-  return fheInstance;
+  })();
+
+  const result = await initPromise;
+  if (!result) throw new Error('FHE instance not available');
+  return result;
 };
 
 // Cleanup function to dispose of FHE instance
 export const cleanupFHEInstance = () => {
   fheInstance = null;
-  isInitializing = false;
+  initPromise = null;
 };
 
 // Force re-initialization for new contract addresses
@@ -269,7 +194,7 @@ export const reinitializeFHEForNewContracts = () => {
   console.log('Current contract addresses will be handled by contract configuration system');
   
   fheInstance = null;
-  isInitializing = false;
+  initPromise = null;
   publicKeyStorage.clear();
   
   // Also clear any cached encryption data in localStorage

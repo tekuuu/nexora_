@@ -341,37 +341,35 @@ export class FhevmDecryptionSignature {
     privateKey: string,
     signer: ethers.Signer
   ): Promise<FhevmDecryptionSignature | null> {
-    try {
-      const userAddress = (await signer.getAddress()) as `0x${string}`;
-      const startTimestamp = _timestampNow();
-      const durationDays = 365;
-      const eip712 = instance.createEIP712(
-        publicKey,
-        contractAddresses,
-        startTimestamp,
-        durationDays
-      );
-      const signature = await signer.signTypedData(
-        eip712.domain,
-        { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
-        eip712.message
-      );
-      return new FhevmDecryptionSignature({
-        publicKey,
-        privateKey,
-        contractAddresses: contractAddresses as `0x${string}`[],
-        startTimestamp,
-        durationDays,
-        signature,
-        eip712: eip712 as EIP712Type,
-        userAddress,
-      });
-    } catch (e: any) {
-      console.error('FhevmDecryptionSignature.new(): failed to sign EIP-712 message', {
-        reason: e?.message ?? String(e),
-      });
-      return null;
-    }
+    const userAddress = (await signer.getAddress()) as `0x${string}`;
+    const startTimestamp = _timestampNow();
+    const durationDays = 365;
+    const eip712 = instance.createEIP712(
+      publicKey,
+      contractAddresses,
+      startTimestamp,
+      durationDays
+    );
+    // NOTE: do NOT catch signer errors here - let them propagate so callers can
+    // distinguish user cancellations from other failures and decide whether to
+    // retry. Swallowing errors causes callers to receive `null` and lose the
+    // original error details (e.g., user rejection), which can lead to
+    // repeated wallet popups.
+    const signature = await signer.signTypedData(
+      eip712.domain,
+      { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
+      eip712.message
+    );
+    return new FhevmDecryptionSignature({
+      publicKey,
+      privateKey,
+      contractAddresses: contractAddresses as `0x${string}`[],
+      startTimestamp,
+      durationDays,
+      signature,
+      eip712: eip712 as EIP712Type,
+      userAddress,
+    });
   }
 
   static async loadOrSign(
@@ -382,34 +380,74 @@ export class FhevmDecryptionSignature {
   ): Promise<FhevmDecryptionSignature | null> {
     const userAddress = (await signer.getAddress()) as `0x${string}`;
 
-    const cached: FhevmDecryptionSignature | null =
-      await FhevmDecryptionSignature.loadFromLocalStorage(
+    // Use a pending-signature map to prevent duplicate simultaneous sign requests
+    // for the same user/contracts/publicKey combination. This avoids showing the
+    // wallet sign popup multiple times if callers race.
+    const storageKey = new FhevmDecryptionSignatureStorageKey(
+      instance,
+      contractAddresses,
+      userAddress,
+      keyPair?.publicKey
+    );
+
+    const pendingKey = storageKey.key;
+
+    // Initialize pending map on the class if not present
+    // @ts-ignore - attach dynamically
+    if (!(FhevmDecryptionSignature as any)._pending) {
+      (FhevmDecryptionSignature as any)._pending = new Map<string, Promise<FhevmDecryptionSignature | null>>();
+    }
+
+    const pending: Map<string, Promise<FhevmDecryptionSignature | null>> = (FhevmDecryptionSignature as any)._pending;
+
+    // If a sign/load operation is already in progress for this key, await it
+    if (pending.has(pendingKey)) {
+      try {
+        return await pending.get(pendingKey)!;
+      } catch {
+        // fall through to attempt again
+      }
+    }
+
+    const promise = (async (): Promise<FhevmDecryptionSignature | null> => {
+      // First try to load from storage (if enabled)
+      const cached: FhevmDecryptionSignature | null = await FhevmDecryptionSignature.loadFromLocalStorage(
         instance,
         contractAddresses,
         userAddress,
         keyPair?.publicKey
       );
 
-    if (cached) {
-      return cached;
+      if (cached) {
+        return cached;
+      }
+
+      const { publicKey, privateKey } = keyPair ?? instance.generateKeypair();
+
+      const sig = await FhevmDecryptionSignature.new(
+        instance,
+        contractAddresses,
+        publicKey,
+        privateKey,
+        signer
+      );
+
+      if (!sig) {
+        return null;
+      }
+
+      await sig.saveToLocalStorage(instance, Boolean(keyPair?.publicKey));
+
+      return sig;
+    })();
+
+    pending.set(pendingKey, promise);
+    try {
+      const res = await promise;
+      return res;
+    } finally {
+      // ensure we always clear pending entry
+      pending.delete(pendingKey);
     }
-
-    const { publicKey, privateKey } = keyPair ?? instance.generateKeypair();
-
-    const sig = await FhevmDecryptionSignature.new(
-      instance,
-      contractAddresses,
-      publicKey,
-      privateKey,
-      signer
-    );
-
-    if (!sig) {
-      return null;
-    }
-
-    await sig.saveToLocalStorage(instance, Boolean(keyPair?.publicKey));
-
-    return sig;
   }
 }
